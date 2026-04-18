@@ -37,7 +37,9 @@ class LoginScreen extends StatelessWidget {
               ElevatedButton(
                 onPressed: () {
                   if (_formKey.currentState!.validate()) {
-                    // Handle login logic
+                    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+                    authProvider.login();
+                    Navigator.pushReplacementNamed(context, '/home');
                   }
                 },
                 child: Text('Login'),
