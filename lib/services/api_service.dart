@@ -1,0 +1,175 @@
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart';
+import 'package:image_picker/image_picker.dart';
+
+class ApiService {
+  static String get baseUrl {
+    if (kIsWeb) return 'http://localhost:3000/api';
+    return 'http://10.0.2.2:3000/api'; 
+  }
+
+  static Future<Map<String, dynamic>> login(String email, String password) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/auth/login'),
+        body: jsonEncode({'email': email, 'password': password}),
+        headers: {'Content-Type': 'application/json'},
+      );
+      return jsonDecode(response.body);
+    } catch (e) { return {'success': false}; }
+  }
+
+  static Future<Map<String, dynamic>> register(String email, String password, String name, String role) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/auth/register'),
+        body: jsonEncode({'email': email, 'password': password, 'name': name, 'role': role}),
+        headers: {'Content-Type': 'application/json'},
+      );
+      return jsonDecode(response.body);
+    } catch (e) { return {'success': false}; }
+  }
+
+  static Future<Map<String, dynamic>> createPost({
+    required String userId,
+    required String content,
+    required bool isPublic,
+    XFile? mediaFile,
+    bool isVideo = false,
+    String? location,
+  }) async {
+    try {
+      var request = http.MultipartRequest('POST', Uri.parse('$baseUrl/posts'));
+      request.fields['userId'] = userId;
+      request.fields['content'] = content;
+      request.fields['isPublic'] = isPublic.toString();
+      request.fields['isVideo'] = isVideo.toString();
+      if (location != null) request.fields['location'] = location;
+
+      if (mediaFile != null) {
+        if (kIsWeb) {
+          final bytes = await mediaFile.readAsBytes();
+          request.files.add(http.MultipartFile.fromBytes('media', bytes, filename: mediaFile.name));
+        } else {
+          request.files.add(await http.MultipartFile.fromPath('media', mediaFile.path));
+        }
+      }
+
+      var streamedResponse = await request.send();
+      var response = await http.Response.fromStream(streamedResponse);
+      return jsonDecode(response.body);
+    } catch (e) { return {'success': false}; }
+  }
+
+  static Future<List<dynamic>> getFeed(String? userId) async {
+    try {
+      final response = await http.get(Uri.parse('$baseUrl/feed?userId=${userId ?? ""}'));
+      return jsonDecode(response.body);
+    } catch (e) { return []; }
+  }
+
+  static Future<bool> updatePost(String postId, String userId, String content) async {
+    try {
+      final response = await http.put(
+        Uri.parse('$baseUrl/posts/$postId'),
+        body: jsonEncode({'userId': userId, 'content': content}),
+        headers: {'Content-Type': 'application/json'},
+      );
+      return jsonDecode(response.body)['success'] ?? false;
+    } catch (e) { return false; }
+  }
+
+  static Future<bool> deletePost(String postId, String userId) async {
+    try {
+      final response = await http.delete(
+        Uri.parse('$baseUrl/posts/$postId'),
+        body: jsonEncode({'userId': userId}),
+        headers: {'Content-Type': 'application/json'},
+      );
+      return jsonDecode(response.body)['success'] ?? false;
+    } catch (e) { return false; }
+  }
+
+  // --- SOCIAL INTERACTIONS ---
+
+  static Future<bool> likePost(String userId, String postId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/posts/like'),
+        body: jsonEncode({'userId': userId, 'postId': postId}),
+        headers: {'Content-Type': 'application/json'},
+      );
+      return jsonDecode(response.body)['success'] ?? false;
+    } catch (e) { return false; }
+  }
+
+  static Future<bool> sharePost(String userId, String postId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/posts/share'),
+        body: jsonEncode({'userId': userId, 'postId': postId}),
+        headers: {'Content-Type': 'application/json'},
+      );
+      return jsonDecode(response.body)['success'] ?? false;
+    } catch (e) { return false; }
+  }
+
+  static Future<bool> savePost(String userId, String postId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/posts/save'),
+        body: jsonEncode({'userId': userId, 'postId': postId}),
+        headers: {'Content-Type': 'application/json'},
+      );
+      return jsonDecode(response.body)['success'] ?? false;
+    } catch (e) { return false; }
+  }
+
+  static Future<bool> addComment(String userId, String postId, String content) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/posts/comment'),
+        body: jsonEncode({'userId': userId, 'postId': postId, 'content': content}),
+        headers: {'Content-Type': 'application/json'},
+      );
+      return jsonDecode(response.body)['success'] ?? false;
+    } catch (e) { return false; }
+  }
+
+  static Future<List<dynamic>> getComments(String postId) async {
+    try {
+      final response = await http.get(Uri.parse('$baseUrl/posts/$postId/comments'));
+      return jsonDecode(response.body);
+    } catch (e) { return []; }
+  }
+
+  static Future<bool> likeComment(String userId, String commentId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/comments/$commentId/like'),
+        body: jsonEncode({'userId': userId}),
+        headers: {'Content-Type': 'application/json'},
+      );
+      return jsonDecode(response.body)['success'] ?? false;
+    } catch (e) { return false; }
+  }
+
+  static Future<bool> replyToComment(String userId, String commentId, String content) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/comments/$commentId/reply'),
+        body: jsonEncode({'userId': userId, 'content': content}),
+        headers: {'Content-Type': 'application/json'},
+      );
+      return jsonDecode(response.body)['success'] ?? false;
+    } catch (e) { return false; }
+  }
+
+  static Future<List<dynamic>> getReplies(String commentId) async {
+    try {
+      final response = await http.get(Uri.parse('$baseUrl/comments/$commentId/replies'));
+      return jsonDecode(response.body);
+    } catch (e) { return []; }
+  }
+}
