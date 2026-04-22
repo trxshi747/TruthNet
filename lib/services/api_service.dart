@@ -265,4 +265,151 @@ class ApiService {
       return jsonDecode(response.body);
     } catch (e) { return []; }
   }
+
+  // --- ADMIN USERS ---
+
+  static Future<List<dynamic>> getAllUsers() async {
+    try {
+      final response = await http.get(Uri.parse('$baseUrl/admin/users'));
+      return jsonDecode(response.body);
+    } catch (e) { return []; }
+  }
+
+  static Future<bool> banUser(String userId) async {
+    try {
+      final response = await http.put(
+        Uri.parse('$baseUrl/admin/users/$userId/ban'),
+      );
+      return jsonDecode(response.body)['success'] ?? false;
+    } catch (e) { return false; }
+  }
+
+  static Future<bool> deactivateUser(String userId) async {
+    try {
+      final response = await http.put(
+        Uri.parse('$baseUrl/admin/users/$userId/deactivate'),
+      );
+      return jsonDecode(response.body)['success'] ?? false;
+    } catch (e) { return false; }
+  }
+
+  static Future<bool> deleteUser(String userId) async {
+    try {
+      final response = await http.delete(
+        Uri.parse('$baseUrl/admin/users/$userId'),
+      );
+      return jsonDecode(response.body)['success'] ?? false;
+    } catch (e) { return false; }
+  }
+
+  // ---ADMIN MODERATORS ---
+
+  static Future<List<dynamic>> getModerators() async {
+    try {
+      final response = await http.get(Uri.parse('$baseUrl/admin/moderators'));
+      return jsonDecode(response.body);
+    } catch (e) { return []; }
+  }
+
+  static Future<bool> addModerator(Map<String, dynamic> data) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/admin/moderators'),
+        body: jsonEncode(data),
+        headers: {'Content-Type': 'application/json'},
+      );
+
+      return jsonDecode(response.body)['success'] ?? false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  static Future<bool> updateModerator(String id, Map<String, dynamic> data) async {
+    try {
+      final response = await http.put(
+        Uri.parse('$baseUrl/admin/moderators/$id'),
+        body: jsonEncode(data),
+        headers: {'Content-Type': 'application/json'},
+      );
+
+      return jsonDecode(response.body)['success'] ?? false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  static Future<bool> deleteModerator(String id) async {
+    try {
+      final response = await http.delete(
+        Uri.parse('$baseUrl/admin/moderators/$id'),
+        headers: {'Content-Type': 'application/json'},
+      );
+
+      final data = jsonDecode(response.body);
+      return data['success'] ?? false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // --- ADMIN ROLES ---
+
+  static Future<List<dynamic>> getRoles() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/admin/roles'),
+      );
+
+      final data = jsonDecode(response.body);
+      return data is List ? data : data['data'] ?? [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  static Future<bool> addRole(Map<String, dynamic> data) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/admin/roles'),
+        body: jsonEncode(data),
+        headers: {'Content-Type': 'application/json'},
+      );
+
+      final res = jsonDecode(response.body);
+      return res['success'] ?? false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  static Future<bool> updateRole(String id, Map<String, dynamic> data) async {
+    try {
+      final response = await http.put(
+        Uri.parse('$baseUrl/admin/roles/$id'),
+        body: jsonEncode(data),
+        headers: {'Content-Type': 'application/json'},
+      );
+
+      final res = jsonDecode(response.body);
+      return res['success'] ?? false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  static Future<bool> deleteRole(String id) async {
+    try {
+      final response = await http.delete(
+        Uri.parse('$baseUrl/admin/roles/$id'),
+        headers: {'Content-Type': 'application/json'},
+      );
+
+      final res = jsonDecode(response.body);
+      return res['success'] ?? false;
+    } catch (e) {
+      return false;
+    }
+  }
+
 }
