@@ -10,13 +10,39 @@ import 'package:model2/widgets/dynamic_background.dart';
 import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
+// Custom controller to highlight @tags in orange (same as HomeScreen)
+class TaggingTextEditingController extends TextEditingController {
+  @override
+  TextSpan buildTextSpan({required BuildContext context, TextStyle? style, required bool withComposing}) {
+    final List<TextSpan> children = [];
+    final RegExp tagRegExp = RegExp(r"(@\w+)");
+
+    text.splitMapJoin(
+      tagRegExp,
+      onMatch: (Match match) {
+        children.add(TextSpan(
+          text: match[0],
+          style: style?.copyWith(color: const Color(0xFFF0C38E), fontWeight: FontWeight.bold),
+        ));
+        return "";
+      },
+      onNonMatch: (String text) {
+        children.add(TextSpan(text: text, style: style));
+        return "";
+      },
+    );
+
+    return TextSpan(style: style, children: children);
+  }
+}
+
 class PostScreen extends StatefulWidget {
   @override
   _PostScreenState createState() => _PostScreenState();
 }
 
 class _PostScreenState extends State<PostScreen> {
-  final _contentController = TextEditingController();
+  final TaggingTextEditingController _contentController = TaggingTextEditingController();
   final ImagePicker _picker = ImagePicker();
   
   bool _isPublic = true;
@@ -25,6 +51,7 @@ class _PostScreenState extends State<PostScreen> {
   bool _isVideo = false;
   String? _locationString;
   String? _placeName;
+  List<dynamic> _userSearchResults = [];
 
   @override
   void dispose() {
@@ -101,7 +128,6 @@ class _PostScreenState extends State<PostScreen> {
       if (permission == LocationPermission.always || permission == LocationPermission.whileInUse) {
         Position position = await Geolocator.getCurrentPosition();
         
-        // REVERSE GEOCODING: Get Place Name
         try {
           List<Placemark> placemarks = await placemarkFromCoordinates(position.latitude, position.longitude);
           if (placemarks.isNotEmpty) {
@@ -187,7 +213,14 @@ class _PostScreenState extends State<PostScreen> {
                 _buildHeader(authProvider),
                 const SizedBox(height: 20),
                 if (_mediaFile != null) _buildMediaPreview(),
-                Expanded(child: _buildEditor()),
+                Expanded(
+                  child: Stack(
+                    children: [
+                      _buildEditor(),
+                      if (_userSearchResults.isNotEmpty) _buildTaggingOverlay(),
+                    ],
+                  ),
+                ),
                 const Divider(height: 40, color: Colors.white10),
                 _buildActionToolbar(),
               ],
@@ -262,12 +295,72 @@ class _PostScreenState extends State<PostScreen> {
       ),
       child: TextField(
         controller: _contentController,
+        onChanged: (text) async {
+          final int atIndex = text.lastIndexOf('@');
+          if (atIndex != -1) {
+            final String query = text.substring(atIndex + 1);
+            if (!query.contains(' ')) {
+              final results = await ApiService.searchUsers(query);
+              setState(() {
+                _userSearchResults = results;
+              });
+              return;
+            }
+          }
+          if (_userSearchResults.isNotEmpty) {
+            setState(() {
+              _userSearchResults = [];
+            });
+          }
+        },
         maxLines: null,
-        style: GoogleFonts.spaceMono(),
+        style: GoogleFonts.spaceMono(color: Colors.white),
         decoration: InputDecoration(
           hintText: "INPUT_DATA_HERE...",
           hintStyle: GoogleFonts.spaceMono(color: Colors.white24),
           border: InputBorder.none,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTaggingOverlay() {
+    return Positioned(
+      bottom: 0,
+      left: 0,
+      right: 0,
+      child: Container(
+        constraints: const BoxConstraints(maxHeight: 150),
+        decoration: BoxDecoration(
+          color: const Color(0xFF48426D).withOpacity(0.95),
+          borderRadius: BorderRadius.circular(15),
+          border: Border.all(color: const Color(0xFFF0C38E).withOpacity(0.3)),
+          boxShadow: [BoxShadow(color: Colors.black45, blurRadius: 10)],
+        ),
+        child: ListView.builder(
+          shrinkWrap: true,
+          itemCount: _userSearchResults.length,
+          itemBuilder: (context, index) {
+            final user = _userSearchResults[index];
+            return ListTile(
+              dense: true,
+              leading: CircleAvatar(
+                radius: 12,
+                backgroundColor: const Color(0xFFF0C38E),
+                child: Text(user['name'][0].toUpperCase(), style: const TextStyle(fontSize: 10, color: Color(0xFF312C51))),
+              ),
+              title: Text("@${user['name']}", 
+                style: GoogleFonts.spaceMono(color: const Color(0xFFF0C38E), fontSize: 14, fontWeight: FontWeight.bold)),
+              onTap: () {
+                final text = _contentController.text;
+                final atIndex = text.lastIndexOf('@');
+                final newText = text.substring(0, atIndex) + "@${user['name']} ";
+                _contentController.text = newText;
+                _contentController.selection = TextSelection.fromPosition(TextPosition(offset: newText.length));
+                setState(() => _userSearchResults = []);
+              },
+            );
+          },
         ),
       ),
     );

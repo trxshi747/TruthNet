@@ -41,7 +41,7 @@ app.post('/api/auth/register', async (req, res) => {
         const hashedPassword = await bcrypt.hash(password, 10);
         const result = await session.run(
             `MERGE (r:Role {name: $roleName})
-             CREATE (u:User {id: randomUUID(), email: $email, password: $hashedPassword, name: $name, status: "Active", createdAt: timestamp()})
+             CREATE (u:User {id: randomUUID(), email: $email, password: $hashedPassword, name: $name, status: "Active", bio: "INITIATING_BIOGRAPHY...", createdAt: timestamp()})
              CREATE (u)-[:HAS_ROLE]->(r)
              RETURN u, r.name as role`,
             { email, hashedPassword, name, roleName: role || "Member" }
@@ -70,6 +70,120 @@ app.post('/api/auth/login', async (req, res) => {
     } finally { await session.close(); }
 });
 
+// --- SETTINGS & ACCOUNT ---
+
+app.put('/api/auth/update-password', async (req, res) => {
+    const { userId, oldPassword, newPassword } = req.body;
+    const session = driver.session();
+    try {
+        const result = await session.run('MATCH (u:User {id: $userId}) RETURN u', { userId });
+        if (result.records.length === 0) return res.status(404).json({ success: false, message: "User not found" });
+
+        const user = result.records[0].get('u').properties;
+        const match = await bcrypt.compare(oldPassword, user.password);
+        if (!match) return res.status(401).json({ success: false, message: "INCORRECT_OLD_PASSWORD" });
+
+        const hashedNewPassword = await bcrypt.hash(newPassword, 10);
+        await session.run('MATCH (u:User {id: $userId}) SET u.password = $hashedNewPassword', { userId, hashedNewPassword });
+        res.json({ success: true });
+    } catch (e) { res.status(500).send(e.message); }
+    finally { await session.close(); }
+});
+
+app.put('/api/auth/update-email', async (req, res) => {
+    const { userId, newEmail } = req.body;
+    const session = driver.session();
+    try {
+        const check = await session.run('MATCH (u:User {email: $newEmail}) RETURN u', { newEmail });
+        if (check.records.length > 0) return res.status(400).json({ success: false, message: "EMAIL_ALREADY_IN_USE" });
+
+        await session.run('MATCH (u:User {id: $userId}) SET u.email = $newEmail', { userId, newEmail });
+        res.json({ success: true });
+    } catch (e) { res.status(500).send(e.message); }
+    finally { await session.close(); }
+});
+
+// --- PROFILE MANAGEMENT ---
+
+app.get('/api/users/:userId/profile', async (req, res) => {
+    const { userId } = req.params;
+    const session = driver.session();
+    try {
+        const result = await session.run(
+            `MATCH (u:User {id: $userId})
+             OPTIONAL MATCH (u)-[:POSTED]->(p:Post) WHERE p.isDeleted IS NULL OR p.isDeleted = false
+             OPTIONAL MATCH (u)-[:FOLLOWS]->(following)
+             OPTIONAL MATCH (follower)-[:FOLLOWS]->(u)
+             RETURN u,
+                    count(DISTINCT p) as postCount,
+                    count(DISTINCT following) as followingCount,
+                    count(DISTINCT follower) as followerCount`,
+            { userId }
+        );
+        if (result.records.length > 0) {
+            const user = result.records[0].get('u').properties;
+            res.json({
+                ...user,
+                postCount: result.records[0].get('postCount').toInt(),
+                followingCount: result.records[0].get('followingCount').toInt(),
+                followerCount: result.records[0].get('followerCount').toInt()
+            });
+        } else {
+            res.status(404).json({ message: "USER_NOT_FOUND" });
+        }
+    } catch (e) { res.status(500).send(e.message); }
+    finally { await session.close(); }
+});
+
+app.put('/api/users/:userId/profile', upload.single('avatar'), async (req, res) => {
+    const { userId } = req.params;
+    const { name, bio } = req.body;
+    const avatarUrl = req.file ? `/uploads/${req.file.filename}` : undefined;
+
+    const session = driver.session();
+    try {
+        let query = 'MATCH (u:User {id: $userId}) SET u.name = $name, u.bio = $bio';
+        if (avatarUrl) query += ', u.avatar = $avatarUrl';
+        query += ' RETURN u';
+
+        const result = await session.run(query, { userId, name, bio, avatarUrl });
+        res.json({ success: true, user: result.records[0].get('u').properties });
+    } catch (e) { res.status(500).send(e.message); }
+    finally { await session.close(); }
+});
+
+app.get('/api/users/:userId/posts', async (req, res) => {
+    const { userId } = req.params;
+    const session = driver.session();
+    try {
+        const result = await session.run(
+            `MATCH (u:User {id: $userId})-[:POSTED]->(p:Post)
+             WHERE p.isDeleted IS NULL OR p.isDeleted = false
+             RETURN u.name as author, p as post
+             ORDER BY p.timestamp DESC`,
+            { userId }
+        );
+        res.json(result.records.map(r => ({ author: r.get('author'), ...r.get('post').properties })));
+    } catch (e) { res.status(500).json([]); }
+    finally { await session.close(); }
+});
+
+app.get('/api/users/:userId/archive', async (req, res) => {
+    const { userId } = req.params;
+    const session = driver.session();
+    try {
+        const result = await session.run(
+            `MATCH (u:User {id: $userId})-[:POSTED]->(p:Post)
+             WHERE p.isDeleted = true
+             RETURN u.name as author, p as post
+             ORDER BY p.timestamp DESC`,
+            { userId }
+        );
+        res.json(result.records.map(r => ({ author: r.get('author'), ...r.get('post').properties })));
+    } catch (e) { res.status(500).json([]); }
+    finally { await session.close(); }
+});
+
 // --- POSTS ---
 
 app.post('/api/posts', upload.single('media'), async (req, res) => {
@@ -82,15 +196,7 @@ app.post('/api/posts', upload.single('media'), async (req, res) => {
     try {
         const result = await session.run(
             `MATCH (u:User {id: $userId})
-             CREATE (p:Post {
-                id: randomUUID(),
-                content: $content,
-                mediaUrl: $mediaUrl,
-                location: $location,
-                isVideo: $isVideo,
-                isPublic: $isPublic,
-                timestamp: timestamp()
-             })
+             CREATE (p:Post {id: randomUUID(), content: $content, mediaUrl: $mediaUrl, location: $location, isVideo: $isVideo, isPublic: $isPublic, isDeleted: false, timestamp: timestamp()})
              CREATE (u)-[:POSTED]->(p)
              RETURN p`,
             { userId, content, mediaUrl, location: location || null, isVideo, isPublic }
@@ -106,7 +212,7 @@ app.get('/api/feed', async (req, res) => {
     try {
         const result = await session.run(
             `MATCH (u:User)-[:POSTED]->(p:Post)
-             WHERE p.isPublic = true
+             WHERE p.isPublic = true AND (p.isDeleted IS NULL OR p.isDeleted = false)
              RETURN u.name as author, u.id as authorId, p as post,
                     COUNT { (p)<-[:LIKED]-() } as likeCount,
                     COUNT { (p)<-[:ON]-(:Comment) } as commentCount,
@@ -130,7 +236,6 @@ app.get('/api/feed', async (req, res) => {
     finally { await session.close(); }
 });
 
-// Update Post (Edit)
 app.put('/api/posts/:postId', async (req, res) => {
     const { postId } = req.params;
     const { userId, content } = req.body;
@@ -138,7 +243,7 @@ app.put('/api/posts/:postId', async (req, res) => {
     try {
         const result = await session.run(
             `MATCH (u:User {id: $userId})-[:POSTED]->(p:Post {id: $postId})
-             WHERE p.timestamp > timestamp() - (24 * 60 * 60 * 1000)
+             WHERE (p.isDeleted IS NULL OR p.isDeleted = false) AND p.timestamp > timestamp() - (24 * 60 * 60 * 1000)
              SET p.content = $content, p.isEdited = true, p.updatedAt = timestamp()
              RETURN p`,
             { postId, userId, content }
@@ -152,8 +257,27 @@ app.put('/api/posts/:postId', async (req, res) => {
     finally { await session.close(); }
 });
 
-// Delete Post
-app.delete('/api/posts/:postId', async (req, res) => {
+app.post('/api/posts/:postId/archive', async (req, res) => {
+    const { postId } = req.params;
+    const { userId } = req.body;
+    const session = driver.session();
+    try {
+        const result = await session.run(
+            `MATCH (u:User {id: $userId})-[:POSTED]->(p:Post {id: $postId})
+             SET p.isDeleted = true, p.deletedAt = timestamp()
+             RETURN p`,
+            { postId, userId }
+        );
+        if (result.records.length > 0) {
+            res.json({ success: true });
+        } else {
+            res.status(403).json({ success: false, message: "UNAUTHORIZED_OR_NOT_FOUND" });
+        }
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+    finally { await session.close(); }
+});
+
+app.delete('/api/posts/:postId/permanent', async (req, res) => {
     const { postId } = req.params;
     const { userId } = req.body;
     const session = driver.session();
@@ -170,6 +294,22 @@ app.delete('/api/posts/:postId', async (req, res) => {
             res.status(403).json({ success: false, message: "UNAUTHORIZED_OR_NOT_FOUND" });
         }
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+    finally { await session.close(); }
+});
+
+// --- USERS SEARCH ---
+app.get('/api/users/search', async (req, res) => {
+    const { query } = req.query;
+    const session = driver.session();
+    try {
+        const result = await session.run(
+            `MATCH (u:User)
+             WHERE toLower(u.name) CONTAINS toLower($query)
+             RETURN u.name as name, u.id as id LIMIT 5`,
+            { query: query || "" }
+        );
+        res.json(result.records.map(r => ({ name: r.get('name'), id: r.get('id') })));
+    } catch (e) { res.status(500).json([]); }
     finally { await session.close(); }
 });
 

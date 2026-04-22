@@ -4,7 +4,36 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:model2/providers/auth_provider.dart';
 import 'package:model2/services/api_service.dart';
 import 'package:model2/widgets/dynamic_background.dart';
+import 'package:model2/screens/profile_screen.dart';
 import 'package:share_plus/share_plus.dart';
+
+// Global key to trigger profile refresh from outside
+final GlobalKey<ProfileScreenState> profileKey = GlobalKey<ProfileScreenState>();
+
+class TaggingTextEditingController extends TextEditingController {
+  @override
+  TextSpan buildTextSpan({required BuildContext context, TextStyle? style, required bool withComposing}) {
+    final List<TextSpan> children = [];
+    final RegExp tagRegExp = RegExp(r"(@\w+)");
+
+    text.splitMapJoin(
+      tagRegExp,
+      onMatch: (Match match) {
+        children.add(TextSpan(
+          text: match[0],
+          style: style?.copyWith(color: const Color(0xFFF0C38E), fontWeight: FontWeight.bold),
+        ));
+        return "";
+      },
+      onNonMatch: (String text) {
+        children.add(TextSpan(text: text, style: style));
+        return "";
+      },
+    );
+
+    return TextSpan(style: style, children: children);
+  }
+}
 
 class HomeScreen extends StatefulWidget {
   @override
@@ -56,13 +85,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final success = await ApiService.savePost(authProvider.user!.id, postId);
     if (success) {
-      _fetchFeed(); // Refresh to update bookmark state
+      _fetchFeed(); 
       _showFeedback("TRANSMISSION_STATUS_UPDATED");
     }
   }
 
   Future<void> _handleShare(String postId, String content, String author) async {
-    debugPrint("DEBUG: TRIGGERING_SHARE_SHEET...");
     try {
       await Share.share(
         'Check out this TruthNet transmission from $author: \n\n"$content"',
@@ -79,9 +107,37 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Widget _buildRichText(String text, {double fontSize = 13, Color defaultColor = Colors.white}) {
+    final List<TextSpan> children = [];
+    final RegExp tagRegExp = RegExp(r"(@\w+)");
+
+    text.splitMapJoin(
+      tagRegExp,
+      onMatch: (Match match) {
+        children.add(TextSpan(
+          text: match[0],
+          style: GoogleFonts.spaceMono(color: const Color(0xFFF0C38E), fontWeight: FontWeight.bold, fontSize: fontSize),
+        ));
+        return "";
+      },
+      onNonMatch: (String part) {
+        children.add(TextSpan(
+          text: part,
+          style: GoogleFonts.spaceMono(color: defaultColor, fontSize: fontSize),
+        ));
+        return "";
+      },
+    );
+
+    return RichText(
+      text: TextSpan(children: children),
+    );
+  }
+
   void _showCommentSheet(String postId) async {
-    final TextEditingController _commentController = TextEditingController();
+    final TaggingTextEditingController _commentController = TaggingTextEditingController();
     List<dynamic> _comments = await ApiService.getComments(postId);
+    List<dynamic> _userSearchResults = [];
     String? _replyToId;
     String? _replyToAuthor;
     Map<String, List<dynamic>> _repliesMap = {};
@@ -97,10 +153,10 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text("COMMENTS", style: GoogleFonts.righteous(color: const Color(0xFFF0C38E), fontSize: 18)),
+              Text("COMMENTS_STREAM", style: GoogleFonts.righteous(color: const Color(0xFFF0C38E), fontSize: 18)),
               const SizedBox(height: 10),
               ConstrainedBox(
-                constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.5),
+                constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.4),
                 child: _comments.isEmpty
                     ? Padding(
                         padding: const EdgeInsets.all(20.0),
@@ -142,7 +198,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                     }),
                                   ],
                                 ),
-                                Text(comment['content'] ?? "", style: GoogleFonts.spaceMono(color: Colors.white, fontSize: 13)),
+                                _buildRichText(comment['content'] ?? "", fontSize: 13),
                                 if (hasReplies || isExpanded)
                                    Padding(
                                      padding: const EdgeInsets.only(left: 20, top: 5),
@@ -182,7 +238,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                                      }),
                                                    ],
                                                  ),
-                                                 Text(reply['content'] ?? "", style: GoogleFonts.spaceMono(color: Colors.white70, fontSize: 12)),
+                                                 _buildRichText(reply['content'] ?? "", fontSize: 12, defaultColor: Colors.white70),
                                                ],
                                              ),
                                            )).toList(),
@@ -195,6 +251,42 @@ class _HomeScreenState extends State<HomeScreen> {
                         },
                       ),
               ),
+              if (_userSearchResults.isNotEmpty)
+                Container(
+                  constraints: const BoxConstraints(maxHeight: 180),
+                  margin: const EdgeInsets.only(bottom: 10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF48426D).withOpacity(0.9),
+                    borderRadius: BorderRadius.circular(15),
+                    border: Border.all(color: const Color(0xFFF0C38E).withOpacity(0.3)),
+                    boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 10)],
+                  ),
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: _userSearchResults.length,
+                    itemBuilder: (context, index) {
+                      final user = _userSearchResults[index];
+                      return ListTile(
+                        dense: true,
+                        leading: CircleAvatar(
+                          radius: 12,
+                          backgroundColor: const Color(0xFFF0C38E),
+                          child: Text(user['name'][0].toUpperCase(), style: const TextStyle(fontSize: 10, color: Color(0xFF312C51))),
+                        ),
+                        title: Text("@${user['name']}", 
+                          style: GoogleFonts.spaceMono(color: const Color(0xFFF0C38E), fontSize: 14, fontWeight: FontWeight.bold)),
+                        onTap: () {
+                          final text = _commentController.text;
+                          final atIndex = text.lastIndexOf('@');
+                          final newText = text.substring(0, atIndex) + "@${user['name']} ";
+                          _commentController.text = newText;
+                          _commentController.selection = TextSelection.fromPosition(TextPosition(offset: newText.length));
+                          setModalState(() => _userSearchResults = []);
+                        },
+                      );
+                    },
+                  ),
+                ),
               const Divider(color: Colors.white10),
               if (_replyToId != null)
                 Container(
@@ -213,9 +305,28 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               TextField(
                 controller: _commentController,
+                onChanged: (text) async {
+                  final int atIndex = text.lastIndexOf('@');
+                  if (atIndex != -1) {
+                    final String query = text.substring(atIndex + 1);
+                    if (!query.contains(' ')) {
+                      debugPrint("DEBUG: SEARCHING_USER_NODE: $query");
+                      final results = await ApiService.searchUsers(query);
+                      setModalState(() {
+                        _userSearchResults = results;
+                      });
+                      return;
+                    }
+                  }
+                  if (_userSearchResults.isNotEmpty) {
+                    setModalState(() {
+                      _userSearchResults = [];
+                    });
+                  }
+                },
                 style: GoogleFonts.spaceMono(color: Colors.white),
                 decoration: InputDecoration(
-                  hintText: _replyToId == null ? "ADD_COMMENT..." : "ADD_REPLY...",
+                  hintText: _replyToId == null ? "ADD_RESPONSE..." : "ADD_REPLY...",
                   hintStyle: GoogleFonts.spaceMono(color: Colors.white24),
                   border: InputBorder.none,
                   suffixIcon: IconButton(
@@ -241,6 +352,8 @@ class _HomeScreenState extends State<HomeScreen> {
                           });
                           _fetchFeed();
                         }
+                      } else {
+                        _showFeedback("LOGIN_REQUIRED_TO_COMMENT");
                       }
                     },
                   ),
@@ -285,7 +398,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 _fetchFeed();
                 _showFeedback("TRANSMISSION_UPDATED");
               } else {
-                _showFeedback("EDIT_FAILED_WINDOW_EXPIRED");
+                _showFeedback("EDIT_FAILED_THE_POST_PASSED_24_HOURS");
               }
             },
             child: Text("UPDATE", style: GoogleFonts.spaceMono(color: const Color(0xFF312C51))),
@@ -314,6 +427,7 @@ class _HomeScreenState extends State<HomeScreen> {
       final success = await ApiService.deletePost(postId, auth.user!.id);
       if (success) {
         _fetchFeed();
+        if (_selectedIndex == 3) profileKey.currentState?.fetchProfile();
         _showFeedback("TRANSMISSION_ERASED");
       }
     }
@@ -377,7 +491,10 @@ class _HomeScreenState extends State<HomeScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh_rounded, color: Color(0xFFF1AA9B)),
-            onPressed: _fetchFeed,
+            onPressed: () {
+              _fetchFeed();
+              if (_selectedIndex == 3) profileKey.currentState?.fetchProfile();
+            },
           ),
           IconButton(
             icon: Icon(role == UserRole.guest ? Icons.login_rounded : Icons.logout_rounded, color: const Color(0xFFF1AA9B)),
@@ -420,7 +537,10 @@ class _HomeScreenState extends State<HomeScreen> {
           ? FloatingActionButton(
               onPressed: () async {
                 final result = await Navigator.pushNamed(context, '/post');
-                if (result == true) _fetchFeed();
+                if (result == true) {
+                  _fetchFeed();
+                  if (_selectedIndex == 3) profileKey.currentState?.fetchProfile();
+                }
               },
               child: const Icon(Icons.add_rounded, color: Color(0xFF312C51)),
               backgroundColor: const Color(0xFFF0C38E),
@@ -457,7 +577,7 @@ class _HomeScreenState extends State<HomeScreen> {
       case 1:
         return Center(child: Text('SEARCH_DATABASE...', style: GoogleFonts.spaceMono(color: const Color(0xFFF1AA9B))));
       case 3:
-        return Center(child: Text('PROFILE_LOCKED', style: GoogleFonts.spaceMono(color: const Color(0xFFF1AA9B))));
+        return ProfileScreen(key: profileKey);
       default:
         return _isLoading ? const Center(child: CircularProgressIndicator()) : _buildFeed();
     }
@@ -528,11 +648,11 @@ class _HomeScreenState extends State<HomeScreen> {
                       itemBuilder: (context) => [
                         PopupMenuItem(
                           value: 'edit',
-                          child: Text("EDIT_POST", style: GoogleFonts.spaceMono(color: Colors.white)),
+                          child: Text("EDIT_DATA", style: GoogleFonts.spaceMono(color: Colors.white)),
                         ),
                         PopupMenuItem(
                           value: 'delete',
-                          child: Text("ERASE_POST", style: GoogleFonts.spaceMono(color: Colors.redAccent)),
+                          child: Text("ERASE_NODE", style: GoogleFonts.spaceMono(color: Colors.redAccent)),
                         ),
                       ],
                     )
@@ -545,10 +665,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 16.0),
-                child: Text(
-                  content,
-                  style: GoogleFonts.spaceMono(color: Colors.white, fontSize: 13, height: 1.5),
-                ),
+                child: _buildRichText(content, fontSize: 13),
               ),
               if (mediaUrl != null)
                 Container(

@@ -4,11 +4,13 @@ import 'package:model2/services/api_service.dart';
 enum UserRole { guest, member, moderator, admin }
 
 class User {
-  final String id;
-  final String email;
-  final String name;
-  final UserRole role;
-  final String? profileImageUrl;
+  String id;
+  String email;
+  String name;
+  UserRole role;
+  String? profileImageUrl;
+  String? bio;
+  String? profileColor; // Hex string, e.g., "0xFFF0C38E"
 
   User({
     required this.id,
@@ -16,6 +18,8 @@ class User {
     required this.name,
     required this.role,
     this.profileImageUrl,
+    this.bio,
+    this.profileColor,
   });
 
   factory User.fromJson(Map<String, dynamic> json) {
@@ -28,6 +32,9 @@ class User {
       email: json['email'] ?? '',
       name: json['name'] ?? '',
       role: role,
+      bio: json['bio'],
+      profileImageUrl: json['avatar'],
+      profileColor: json['profileColor'],
     );
   }
 }
@@ -57,6 +64,27 @@ class AuthProvider with ChangeNotifier {
       return true;
     }
     return false;
+  }
+
+  void updateLocalName(String newName) {
+    if (_user != null) {
+      _user!.name = newName;
+      notifyListeners();
+    }
+  }
+
+  void updateLocalEmail(String newEmail) {
+    if (_user != null) {
+      _user!.email = newEmail;
+      notifyListeners();
+    }
+  }
+
+  void updateLocalProfileColor(String color) {
+    if (_user != null) {
+      _user!.profileColor = color;
+      notifyListeners();
+    }
   }
 
   void loginAsGuest() {

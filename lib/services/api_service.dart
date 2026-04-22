@@ -6,7 +6,7 @@ import 'package:image_picker/image_picker.dart';
 class ApiService {
   static String get baseUrl {
     if (kIsWeb) return 'http://localhost:3000/api';
-    return 'http://10.0.2.2:3000/api'; 
+    return 'http://10.0.2.2:3000/api';
   }
 
   static Future<Map<String, dynamic>> login(String email, String password) async {
@@ -82,9 +82,95 @@ class ApiService {
 
   static Future<bool> deletePost(String postId, String userId) async {
     try {
-      final response = await http.delete(
-        Uri.parse('$baseUrl/posts/$postId'),
+      final response = await http.post(
+        Uri.parse('$baseUrl/posts/$postId/archive'),
         body: jsonEncode({'userId': userId}),
+        headers: {'Content-Type': 'application/json'},
+      );
+      return jsonDecode(response.body)['success'] ?? false;
+    } catch (e) { return false; }
+  }
+
+  static Future<bool> deletePostPermanent(String postId, String userId) async {
+    try {
+      final response = await http.delete(
+        Uri.parse('$baseUrl/posts/$postId/permanent'),
+        body: jsonEncode({'userId': userId}),
+        headers: {'Content-Type': 'application/json'},
+      );
+      return jsonDecode(response.body)['success'] ?? false;
+    } catch (e) { return false; }
+  }
+
+  // --- PROFILE ---
+
+  static Future<Map<String, dynamic>> getProfile(String userId) async {
+    try {
+      final response = await http.get(Uri.parse('$baseUrl/users/$userId/profile'));
+      return jsonDecode(response.body);
+    } catch (e) { return {}; }
+  }
+
+  static Future<bool> updateProfile(String userId, String name, String bio, XFile? avatar) async {
+    try {
+      var request = http.MultipartRequest('PUT', Uri.parse('$baseUrl/users/$userId/profile'));
+      request.fields['name'] = name;
+      request.fields['bio'] = bio;
+
+      if (avatar != null) {
+        if (kIsWeb) {
+          final bytes = await avatar.readAsBytes();
+          request.files.add(http.MultipartFile.fromBytes('avatar', bytes, filename: avatar.name));
+        } else {
+          request.files.add(await http.MultipartFile.fromPath('avatar', avatar.path));
+        }
+      }
+
+      var streamedResponse = await request.send();
+      var response = await http.Response.fromStream(streamedResponse);
+      return jsonDecode(response.body)['success'] ?? false;
+    } catch (e) { return false; }
+  }
+
+  static Future<List<dynamic>> getUserPosts(String userId) async {
+    try {
+      final response = await http.get(Uri.parse('$baseUrl/users/$userId/posts'));
+      return jsonDecode(response.body);
+    } catch (e) { return []; }
+  }
+
+  static Future<List<dynamic>> getArchivePosts(String userId) async {
+    try {
+      final response = await http.get(Uri.parse('$baseUrl/users/$userId/archive'));
+      return jsonDecode(response.body);
+    } catch (e) { return []; }
+  }
+
+  static Future<List<dynamic>> getSavedPosts(String userId) async {
+    try {
+      final response = await http.get(Uri.parse('$baseUrl/users/$userId/saved'));
+      return jsonDecode(response.body);
+    } catch (e) { return []; }
+  }
+
+  // --- SETTINGS ---
+
+  static Future<bool> updatePassword(String userId, String oldPassword, String newPassword) async {
+    try {
+      final response = await http.put(
+        Uri.parse('$baseUrl/auth/update-password'),
+        body: jsonEncode({'userId': userId, 'oldPassword': oldPassword, 'newPassword': newPassword}),
+        headers: {'Content-Type': 'application/json'},
+      );
+      return jsonDecode(response.body)['success'] ?? false;
+    } catch (e) { return false; }
+  }
+
+  static Future<bool> updateEmail(String userId, String newEmail) async {
+    try {
+      final response = await http.put(
+        Uri.parse('$baseUrl/auth/update-email'),
+        body: jsonEncode({'userId': userId, 'newEmail': newEmail}),
         headers: {'Content-Type': 'application/json'},
       );
       return jsonDecode(response.body)['success'] ?? false;
@@ -169,6 +255,13 @@ class ApiService {
   static Future<List<dynamic>> getReplies(String commentId) async {
     try {
       final response = await http.get(Uri.parse('$baseUrl/comments/$commentId/replies'));
+      return jsonDecode(response.body);
+    } catch (e) { return []; }
+  }
+
+  static Future<List<dynamic>> searchUsers(String query) async {
+    try {
+      final response = await http.get(Uri.parse('$baseUrl/users/search?query=$query'));
       return jsonDecode(response.body);
     } catch (e) { return []; }
   }
