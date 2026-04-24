@@ -1,5 +1,6 @@
 const express = require('express');
 const neo4j = require('neo4j-driver');
+require('dotenv').config();
 const bodyParser = require('body-parser');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
@@ -24,7 +25,7 @@ const upload = multer({ storage: storage });
 // NEO4J CONNECTION
 const driver = neo4j.driver(
     'bolt://localhost:7687',
-    neo4j.auth.basic('neo4j', 'trashistrxsh')
+    neo4j.auth.basic(process.env.NEO4J_USER, process.env.NEO4J_PASSWORD)
 );
 
 app.get('/', (req, res) => res.send('TruthNet API Bridge: Active'));
@@ -452,5 +453,253 @@ app.get('/api/comments/:commentId/replies', async (req, res) => {
     } catch (e) { res.status(500).json([]); }
     finally { await session.close(); }
 });
+
+// --- Admin
+
+app.post('/api/auth/admin/register', async (req, res) => {
+    const { email, password, name, username, role } = req.body;
+    const session = driver.session();
+    try {
+        const check = await session.run('MATCH (u:User {email: $email}) RETURN u', { email });
+        if (check.records.length > 0) return res.status(400).json({ success: false, message: "User exists" });
+
+        const hashedPassword = await bcrypt.hash(password, 10);
+        const result = await session.run(
+            `MERGE (r:Role {name: $roleName})
+             CREATE (u:User {id: randomUUID(), email: $email, password: $hashedPassword, name: $name, username: $username,  status: "Active", bio: "INITIATING_BIOGRAPHY...", createdAt: timestamp()})
+             CREATE (u)-[:HAS_ROLE]->(r)
+             RETURN u, r.name as role`,
+            { email, hashedPassword, name, username, roleName: role || "Member" }
+        );
+        res.json({ success: true, user: { ...result.records[0].get('u').properties, role: result.records[0].get('role') } });
+    } catch (e) {
+        console.error("DB Error:", e.message);
+        res.status(500).json({ success: false, message: e.message });
+    } finally { await session.close(); }
+});
+
+
+
+// --- Moderator
+
+//get all moderators
+app.get('/api/admin/moderators', async (req, res) => {
+    const session = driver.session();
+
+    try {
+        const result = await session.run(`
+            MATCH (u:User)-[:HAS_ROLE]->(r:Role {name: "Moderator"})
+            RETURN u, r.name as role
+        `);
+
+        const moderators = result.records.map(r => ({
+            ...r.get('u').properties,
+            role: r.get('role')
+        }));
+
+        res.json(moderators);
+
+    } catch (e) {
+        res.status(500).json([]);
+    } finally {
+        await session.close();
+    }
+});
+
+// add moderator
+app.post('/api/admin/moderators', async (req, res) => {
+    const { name, username, email, password, status, role } = req.body;
+    const session = driver.session();
+
+    try {
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        const result = await session.run(`
+            MERGE (r:Role {name: "Moderator"})
+            CREATE (u:User {
+                id: randomUUID(),
+                name: $name,
+                username: $username,
+                email: $email,
+                password: $password,
+                status: $status,
+                createdAt: timestamp()
+            })
+            CREATE (u)-[:HAS_ROLE]->(r)
+            RETURN u
+        `, {
+            name, username, email,
+            password: hashedPassword,
+            status
+        });
+
+        res.json({ success: true });
+
+    } catch (e) {
+        res.status(500).json({ success: false });
+    } finally {
+        await session.close();
+    }
+});
+
+//update moderator
+app.put('/api/admin/moderators/:id', async (req, res) => {
+    const { id } = req.params;
+    const data = req.body;
+
+    const session = driver.session();
+
+    try {
+        await session.run(`
+            MATCH (u:User {id: $id})
+            SET u.name = $name,
+                u.username = $username,
+                u.email = $email,
+                u.status = $status
+        `, { id, ...data });
+
+        res.json({ success: true });
+
+    } catch (e) {
+        res.status(500).json({ success: false });
+    } finally {
+        await session.close();
+    }
+});
+
+//delete moderator
+app.delete('/api/admin/moderators/:id', async (req, res) => {
+    const { id } = req.params;
+    const session = driver.session();
+
+    try {
+        await session.run(`
+            MATCH (u:User {id: $id})
+            DETACH DELETE u
+        `, { id });
+
+        res.json({ success: true });
+
+    } catch (e) {
+        res.status(500).json({ success: false });
+    } finally {
+        await session.close();
+    }
+});
+
+// add role
+app.post('/api/admin/roles', async (req, res) => {
+  const { name, description } = req.body;
+  const session = driver.session();
+
+  try {
+    await session.run(`
+      CREATE (r:Role {
+        id: randomUUID(),
+        name: $name,
+        description: $description
+      })
+    `, { name, description });
+
+    res.json({ success: true });
+  } finally {
+    await session.close();
+  }
+});
+
+//delete role
+app.delete('/api/admin/roles/:id', async (req, res) => {
+  const { id } = req.params;
+  const session = driver.session();
+
+  try {
+    await session.run(`
+      MATCH (r:Role {id: $id})
+      DETACH DELETE r
+    `, { id });
+
+    res.json({ success: true });
+  } finally {
+    await session.close();
+  }
+});
+
+// get roles
+app.get('/api/admin/roles', async (req, res) => {
+  const session = driver.session();
+  try {
+    const result = await session.run(`MATCH (r:Role) RETURN r`);
+
+    const roles = result.records.map(r => ({
+      id: r.get('r').identity.toString(),
+      ...r.get('r').properties
+    }));
+
+    res.json(roles);
+  } finally {
+    await session.close();
+  }
+});
+
+//global metrics
+app.get('/api/admin/dashboard', async (req, res) => {
+    const session = driver.session();
+
+    try {
+        const result = await session.run(`
+            MATCH (u:User)
+            WITH count(u) as users
+
+            MATCH (p:Post)
+            WITH users, count(p) as posts
+
+            MATCH (c:Comment)
+            WITH users, posts, count(c) as comments
+
+            RETURN users, posts, comments
+        `);
+
+        const record = result.records[0];
+
+        res.json({
+            users: record.get('users').toInt(),
+            posts: record.get('posts').toInt(),
+            comments: record.get('comments').toInt()
+        });
+
+    } catch (e) {
+        res.status(500).json({});
+    } finally {
+        await session.close();
+    }
+});
+
+//posts per day
+app.get('/api/admin/stats/posts-per-day', async (req, res) => {
+    const session = driver.session();
+
+    try {
+        const result = await session.run(`
+            MATCH (p:Post)
+            RETURN date(datetime({epochMillis: p.timestamp})) as day,
+                   count(p) as count
+            ORDER BY day
+        `);
+
+        res.json(result.records.map(r => ({
+            day: r.get('day'),
+            count: r.get('count').toInt()
+        })));
+
+    } catch (e) {
+        res.status(500).json([]);
+    } finally {
+        await session.close();
+    }
+});
+
+
+
+
 
 app.listen(3000, () => console.log('Backend listening on port 3000'));

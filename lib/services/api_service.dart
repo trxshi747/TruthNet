@@ -412,4 +412,17 @@ class ApiService {
     }
   }
 
+  // --- register admin
+
+  static Future<bool> registerAdmin(Map<String, dynamic> data) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/auth/admin/register'),
+      body: jsonEncode(data),
+      headers: {'Content-Type': 'application/json'},
+    );
+
+    final body = jsonDecode(res.body);
+    return body['success'] ?? false;
+  }
+
 }

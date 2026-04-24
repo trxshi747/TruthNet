@@ -99,13 +99,32 @@ class _LoginScreenState extends State<LoginScreen> {
                           _emailController.text,
                           _passwordController.text,
                         );
+                        final auth = Provider.of<AuthProvider>(context, listen: false);
+                        final role = auth.role;
+
                         if (success) {
+                          if (role == UserRole.admin) {
+                            Navigator.pushReplacementNamed(context, '/admin');
+                          }
+                          else if (role == UserRole.moderator) {
+                            Navigator.pushReplacementNamed(context, '/mod');
+                          }
+                          else if (role == UserRole.member) { // for the members
+                            Navigator.pushReplacementNamed(context, '/home');
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text(
+                                  'LOGIN_FAILED: UNKNOWN_IDENTITY')),
+                            );
+                          }
+                        }
+                        /*if (success) {
                           Navigator.pushReplacementNamed(context, '/home');
                         } else {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(content: Text('LOGIN_FAILED: UNKNOWN_IDENTITY')),
                           );
-                        }
+                        }*/
                       }
                     },
                     child: Text(

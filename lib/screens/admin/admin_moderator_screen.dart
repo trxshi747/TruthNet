@@ -42,12 +42,12 @@ class _AdminModeratorsScreenState extends State<AdminModeratorsScreen> {
     setState(() => _isLoading = false);
   }
 
+  //mock data when to see the display format
   List<Map<String, dynamic>> _mockModerators() {
     return [
       {
         "id": "1",
-        "firstName": "Mod",
-        "lastName": "Alpha",
+        "name": "Mod",
         "username": "modalpha",
         "email": "mod1@mail.com",
         "status": "active",
@@ -55,8 +55,7 @@ class _AdminModeratorsScreenState extends State<AdminModeratorsScreen> {
       },
       {
         "id": "2",
-        "firstName": "Mod",
-        "lastName": "Beta",
+        "name": "Beta",
         "username": "modbeta",
         "email": "mod2@mail.com",
         "status": "inactive",
@@ -225,14 +224,14 @@ class _AdminModeratorsScreenState extends State<AdminModeratorsScreen> {
     );
   }
 */
+
   void _openModeratorForm({Map<String, dynamic>? moderator}) {
-    final firstNameController = TextEditingController(text: moderator?['firstName']);
-    final lastNameController = TextEditingController(text: moderator?['lastName']);
+    final nameController = TextEditingController(text: moderator?['name']);
     final usernameController = TextEditingController(text: moderator?['username']);
     final emailController = TextEditingController(text: moderator?['email']);
     final passwordController = TextEditingController();
-    final statusController = TextEditingController(text: moderator?['status'] ?? "active");
-    final roleController = TextEditingController(text: moderator?['role'] ?? "moderator");
+    final statusController = TextEditingController(text: moderator?['status'] ?? "Active");
+    final roleController = TextEditingController(text: moderator?['role'] ?? "Moderator");
 
     showModalBottomSheet(
       context: context,
@@ -248,7 +247,7 @@ class _AdminModeratorsScreenState extends State<AdminModeratorsScreen> {
           right: 25,
           top: 25,
         ),
-        child: SingleChildScrollView( // ⚠️ important pour éviter overflow
+        child: SingleChildScrollView( //  important pour éviter overflow
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -262,8 +261,7 @@ class _AdminModeratorsScreenState extends State<AdminModeratorsScreen> {
 
               const SizedBox(height: 20),
 
-              _buildInput("FIRST NAME", firstNameController),
-              _buildInput("LAST NAME", lastNameController),
+              _buildInput("NAME", nameController),
               _buildInput("USERNAME", usernameController),
               _buildInput("EMAIL", emailController),
               _buildInput("PASSWORD", passwordController, obscure: true),
@@ -279,8 +277,7 @@ class _AdminModeratorsScreenState extends State<AdminModeratorsScreen> {
                 ),
                 onPressed: () async {
                   // 🔥 VALIDATION
-                  if (firstNameController.text.isEmpty ||
-                      lastNameController.text.isEmpty ||
+                  if (nameController.text.isEmpty ||
                       usernameController.text.isEmpty ||
                       emailController.text.isEmpty) {
 
@@ -291,8 +288,7 @@ class _AdminModeratorsScreenState extends State<AdminModeratorsScreen> {
                   }
 
                   final data = {
-                    "firstName": firstNameController.text,
-                    "lastName": lastNameController.text,
+                    "name": nameController.text,
                     "username": usernameController.text,
                     "email": emailController.text,
                     "password": passwordController.text,
@@ -300,6 +296,8 @@ class _AdminModeratorsScreenState extends State<AdminModeratorsScreen> {
                     "role": roleController.text,
                   };
 
+                  //forcing the usage of api instead of mock (trial!)
+                  _useMock = false;
                   if (_useMock) {
                     // MOCK MODE
                     setState(() {
@@ -317,6 +315,7 @@ class _AdminModeratorsScreenState extends State<AdminModeratorsScreen> {
                     if (moderator == null) {
                       await ApiService.addModerator(data);
                     } else {
+                      // this update should be carful ! might cause data loss
                       await ApiService.updateModerator(
                         moderator['id'],
                         data,
@@ -384,6 +383,7 @@ class _AdminModeratorsScreenState extends State<AdminModeratorsScreen> {
 
     if (confirmed != true) return;
 
+    // again ... let's assume we don't use mocks
     if (_useMock) {
       setState(() {
         _moderators.removeWhere((m) => m['id'] == id);
@@ -406,10 +406,7 @@ class _AdminModeratorsScreenState extends State<AdminModeratorsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(mod['firstName'] ?? "N/A",
-              style: GoogleFonts.righteous(color: const Color(0xFFF0C38E))),
-          const SizedBox(height: 5),
-          Text(mod['lastName'] ?? "N/A",
+          Text(mod['name'] ?? "N/A",
               style: GoogleFonts.righteous(color: const Color(0xFFF0C38E))),
           const SizedBox(height: 5),
           Text(mod['username'] ?? "N/A",
@@ -418,8 +415,6 @@ class _AdminModeratorsScreenState extends State<AdminModeratorsScreen> {
           Text(mod['email'] ?? "N/A",
               style: GoogleFonts.righteous(color: const Color(0xFFF0C38E))),
           const SizedBox(height: 5),
-          //Text(mod['password'],
-          //    style: GoogleFonts.righteous(color: const Color(0xFFF0C38E))),
           Text("PASSWORD: HIDDEN",
               style: GoogleFonts.spaceMono(color: Colors.white38)),
           const SizedBox(height: 5),

@@ -34,37 +34,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
     return Scaffold(
       appBar: AppBar(title: const Text("Admin Dashboard")),
-      /*
-      body: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          children: [
-
-            // KPI GRID
-            GridView.count(
-              shrinkWrap: true,
-              crossAxisCount: 2,
-              childAspectRatio: 1.4,
-              children: [
-                kpiCard("Users", "${metrics["users"] ?? 0}", Icons.person),
-                kpiCard("Posts", "${metrics["posts"] ?? 0}", Icons.post_add),
-                kpiCard("Comments", "${metrics["comments"] ?? 0}", Icons.comment),
-                kpiCard("Reports", "${metrics["reports"] ?? 0}", Icons.report),
-              ],
-            ),
-
-            const SizedBox(height: 20),
-
-            Text("Sentiment Analysis",
-                style: GoogleFonts.righteous(color: Colors.white)),
-
-            const SizedBox(height: 10),
-
-            SizedBox(height: 200, child: sentimentChart()),
-          ],
-        ),
-      ),
-      */
       body: Padding(
         padding: const EdgeInsets.all(20),
         child: SingleChildScrollView(

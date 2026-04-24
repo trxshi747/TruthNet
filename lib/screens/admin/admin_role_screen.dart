@@ -216,8 +216,21 @@ class _AdminRoleScreenState extends State<AdminRoleScreen> {
     );
   }
 
-
   void _deleteRole(String id) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text("Confirm"),
+        content: const Text("Delete this role?"),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("Cancel")),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text("Delete")),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
     if (_useMock) {
       setState(() {
         _roles.removeWhere((r) => r['id'] == id);
@@ -231,10 +244,29 @@ class _AdminRoleScreenState extends State<AdminRoleScreen> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Scaffold(
+      /*return const Scaffold(
         body: DynamicBackground(
           child: Center(
             child: CircularProgressIndicator(color: Color(0xFFF0C38E)),
+          ),
+        ),
+      ); */
+      return Scaffold(
+        appBar: AppBar(title: const Text("User Management")),
+
+        floatingActionButton: FloatingActionButton(
+          backgroundColor: const Color(0xFFF0C38E),
+          onPressed: () => _openRoleForm(), // 🔥 ouvre le formulaire
+          child: const Icon(Icons.add, color: Color(0xFF312C51)),
+        ),
+
+        body: DynamicBackground(
+          child: ListView.builder(
+            padding: const EdgeInsets.all(20),
+            itemCount: _roles.length,
+            itemBuilder: (context, index) {
+              return _buildRoleCard(_roles[index]);
+            },
           ),
         ),
       );

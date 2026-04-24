@@ -27,6 +27,20 @@ class User {
     if (json['role'] == 'Admin') role = UserRole.admin;
     if (json['role'] == 'Moderator') role = UserRole.moderator;
 
+    switch ((json['role'] ?? '').toString().toLowerCase()) {
+      case 'admin':
+        role = UserRole.admin;
+        break;
+      case 'moderator':
+        role = UserRole.moderator;
+        break;
+      case 'member':
+        role = UserRole.member;
+        break;
+      default:
+        role = UserRole.guest;
+    }
+
     return User(
       id: json['id'] ?? '',
       email: json['email'] ?? '',
@@ -45,6 +59,11 @@ class AuthProvider with ChangeNotifier {
   User? get user => _user;
   bool get isLoggedIn => _user != null;
   UserRole get role => _user?.role ?? UserRole.guest;
+
+  bool get isAdmin => _user?.role == UserRole.admin;
+  bool get isModerator => _user?.role == UserRole.moderator;
+  bool get isMember => _user?.role == UserRole.member;
+  bool get isGuest => _user?.role == UserRole.guest;
 
   Future<bool> login(String email, String password) async {
     final response = await ApiService.login(email, password);

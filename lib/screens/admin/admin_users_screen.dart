@@ -108,7 +108,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                 ),
               ),
               Text(
-                user['role'] ?? "user",
+                user['role'] ?? "Member",
                 style: GoogleFonts.spaceMono(
                   color: Colors.white54,
                   fontSize: 10,
@@ -127,12 +127,15 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
           const SizedBox(height: 10),
 
           // ACTIONS
+          // the admin manages the users , but does it include banning and deactivating pple ?!
+          // we might say so, for the moment
           Wrap(
             spacing: 8,
             children: [
               _actionButton("BAN", Colors.redAccent, () {
                 _confirmAction("BAN USER ?", () => ApiService.banUser(user['id']));
               }),
+              //deactivate = suspend !
               _actionButton("DEACTIVATE", Colors.orange, () {
                 _confirmAction("DEACTIVATE USER ?", () => ApiService.deactivateUser(user['id']));
               }),
