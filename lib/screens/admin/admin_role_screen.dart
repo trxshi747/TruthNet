@@ -94,7 +94,7 @@ class _AdminRoleScreenState extends State<AdminRoleScreen> {
               }),
               const SizedBox(width: 10),
               _actionButton("DELETE", Colors.red, () {
-                _deleteRole(role['id']);
+                _deleteRole(role);
               }),
             ],
           )
@@ -118,6 +118,7 @@ class _AdminRoleScreenState extends State<AdminRoleScreen> {
     );
   }
 
+  /*
   void _openRoleForm({Map<String, dynamic>? role}) {
     final nameController =
     TextEditingController(text: role?['name']);
@@ -197,7 +198,105 @@ class _AdminRoleScreenState extends State<AdminRoleScreen> {
       ),
     );
   }
+  */
 
+  void _openRoleForm({Map<String, dynamic>? role}) {
+    final nameController = TextEditingController(text: role?['name'] ?? '');
+    final descController = TextEditingController(text: role?['description'] ?? '');
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF312C51),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
+      ),
+      builder: (_) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+          left: 25, right: 25, top: 25,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              role == null ? "ADD ROLE" : "EDIT ROLE",
+              style: GoogleFonts.righteous(color: const Color(0xFFF0C38E), fontSize: 20),
+            ),
+            const SizedBox(height: 20),
+            TextField(
+              controller: nameController,
+              style: GoogleFonts.spaceMono(color: Colors.white),
+              decoration: InputDecoration(
+                labelText: "NAME",
+                labelStyle: GoogleFonts.spaceMono(color: Colors.white54),
+                enabledBorder: const UnderlineInputBorder(
+                  borderSide: BorderSide(color: Colors.white24),
+                ),
+              ),
+            ),
+            const SizedBox(height: 15),
+            TextField(
+              controller: descController,
+              style: GoogleFonts.spaceMono(color: Colors.white),
+              decoration: InputDecoration(
+                labelText: "DESCRIPTION",
+                labelStyle: GoogleFonts.spaceMono(color: Colors.white54),
+                enabledBorder: const UnderlineInputBorder(
+                  borderSide: BorderSide(color: Colors.white24),
+                ),
+              ),
+            ),
+            const SizedBox(height: 25),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFF0C38E),
+                minimumSize: const Size(double.infinity, 50),
+              ),
+              onPressed: () async {
+                if (nameController.text.isEmpty) return;
+
+                bool success;
+                if (role == null) {
+                  // Création
+                  success = await ApiService.addRole({
+                    'name': nameController.text,
+                    'description': descController.text,
+                  });
+                } else {
+                  // ← Mise à jour — passe bien role['id']
+                  success = await ApiService.updateRole(
+                    role['id'],
+                    {
+                      'name': nameController.text,
+                      'description': descController.text,
+                    },
+                  );
+                }
+
+                Navigator.pop(context);
+                if (success) {
+                  fetchRoles(); // recharger la liste
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("ACTION_FAILED")),
+                  );
+                }
+              },
+              child: Text(
+                "SAVE",
+                style: GoogleFonts.spaceMono(
+                  color: const Color(0xFF312C51),
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            const SizedBox(height: 30),
+          ],
+        ),
+      ),
+    );
+  }
 
   Widget _actionButton(String label, Color color, VoidCallback onTap) {
     return InkWell(
@@ -216,6 +315,7 @@ class _AdminRoleScreenState extends State<AdminRoleScreen> {
     );
   }
 
+  /*
   void _deleteRole(String id) async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -238,6 +338,115 @@ class _AdminRoleScreenState extends State<AdminRoleScreen> {
     } else {
       await ApiService.deleteRole(id);
       fetchRoles();
+    }
+  }
+  */
+
+  void _deleteRole(Map<String, dynamic> role) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFF312C51),
+        title: Text(
+          "DELETE ROLE",
+          style: GoogleFonts.righteous(color: Colors.redAccent),
+        ),
+        content: Text(
+          "Delete \"${role['name']}\"?",
+          style: GoogleFonts.spaceMono(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text("CANCEL", style: GoogleFonts.spaceMono(color: Colors.white)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text("DELETE", style: GoogleFonts.spaceMono(color: Colors.redAccent)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    final result = await ApiService.deleteRole(role['id']);
+
+    /*
+    if (result['success'] == true) {
+      fetchRoles();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("ROLE_DELETED")),
+      );
+    } else {
+      // Affiche le message spécifique du backend
+      final message = result['details'] ?? result['message'] ?? 'ACTION_FAILED';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: Colors.orange,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    }
+    */
+
+    if (result['success'] == true) {
+      fetchRoles();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("ROLE_DELETED")),
+      );
+    } else {
+      // Popup au lieu du SnackBar
+      showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          backgroundColor: const Color(0xFF312C51),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: [
+              const Icon(Icons.warning_amber_rounded, color: Colors.orange),
+              const SizedBox(width: 10),
+              Text(
+                "CANNOT DELETE",
+                style: GoogleFonts.righteous(color: Colors.orange),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                "This role cannot be deleted.",
+                style: GoogleFonts.spaceMono(color: Colors.white, fontSize: 13),
+              ),
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.orange.withOpacity(0.4)),
+                ),
+                child: Text(
+                  result['details'] ?? result['message'] ?? 'Role is assigned to users.',
+                  style: GoogleFonts.spaceMono(color: Colors.orange, fontSize: 11),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(
+                "OK",
+                style: GoogleFonts.spaceMono(color: const Color(0xFFF0C38E)),
+              ),
+            ),
+          ],
+        ),
+      );
     }
   }
 

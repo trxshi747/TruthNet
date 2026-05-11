@@ -275,15 +275,6 @@ class ApiService {
     } catch (e) { return []; }
   }
 
-  static Future<bool> banUser(String userId) async {
-    try {
-      final response = await http.put(
-        Uri.parse('$baseUrl/admin/users/$userId/ban'),
-      );
-      return jsonDecode(response.body)['success'] ?? false;
-    } catch (e) { return false; }
-  }
-
   static Future<bool> deactivateUser(String userId) async {
     try {
       final response = await http.put(
@@ -383,6 +374,7 @@ class ApiService {
     }
   }
 
+  /*
   static Future<bool> updateRole(String id, Map<String, dynamic> data) async {
     try {
       final response = await http.put(
@@ -397,7 +389,26 @@ class ApiService {
       return false;
     }
   }
+  */
 
+  // api_service.dart — déjà correct, mais vérifie que tu passes bien l'id
+  static Future<bool> updateRole(String id, Map<String, dynamic> data) async {
+    try {
+      final response = await http.put(
+        Uri.parse('$baseUrl/admin/roles/$id'),
+        body: jsonEncode(data),
+        headers: {'Content-Type': 'application/json'},
+      );
+      debugPrint('updateRole response: ${response.statusCode} ${response.body}');
+      final res = jsonDecode(response.body);
+      return res['success'] ?? false;
+    } catch (e) {
+      debugPrint('updateRole error: $e');
+      return false;
+    }
+  }
+
+  /*
   static Future<bool> deleteRole(String id) async {
     try {
       final response = await http.delete(
@@ -409,6 +420,19 @@ class ApiService {
       return res['success'] ?? false;
     } catch (e) {
       return false;
+    }
+  }
+  */
+
+  static Future<Map<String, dynamic>> deleteRole(String id) async {
+    try {
+      final response = await http.delete(
+        Uri.parse('$baseUrl/admin/roles/$id'),
+        headers: {'Content-Type': 'application/json'},
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'success': false, 'message': 'CONNECTION_ERROR'};
     }
   }
 
@@ -424,5 +448,108 @@ class ApiService {
     final body = jsonDecode(res.body);
     return body['success'] ?? false;
   }
+
+  // --- Manage Users
+
+// api_service.dart - Ajoute ces méthodes
+
+// ============ SANCTION METHODS ============
+
+  static Future<bool> suspendUser({
+    required String userId,
+    required String reason,
+    required int durationDays,
+    required String adminId,
+  }) async {
+    try {
+      final response = await http.put(
+        Uri.parse('$baseUrl/admin/users/$userId/suspend'),
+        body: jsonEncode({
+          'reason': reason,
+          'durationDays': durationDays,
+          'adminId': adminId,
+        }),
+        headers: {'Content-Type': 'application/json'},
+      );
+      return jsonDecode(response.body)['success'] ?? false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+
+  static Future<bool> banUser({
+    required String userId,
+    required String reason,
+    required String adminId,
+  }) async {
+    try {
+      final response = await http.put(
+        Uri.parse('$baseUrl/admin/users/$userId/ban'),
+        body: jsonEncode({
+          'reason': reason,
+          'adminId': adminId,
+        }),
+        headers: {'Content-Type': 'application/json'},
+      );
+      return jsonDecode(response.body)['success'] ?? false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+
+  static Future<bool> revokeSanction({
+    required String sanctionId,
+    required String adminId,
+  }) async {
+    try {
+      final response = await http.put(
+        Uri.parse('$baseUrl/admin/sanctions/$sanctionId/revoke'),
+        body: jsonEncode({'adminId': adminId}),
+        headers: {'Content-Type': 'application/json'},
+      );
+      return jsonDecode(response.body)['success'] ?? false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  static Future<bool> activateUser(String userId) async {
+    try {
+      final response = await http.put(
+        Uri.parse('$baseUrl/admin/users/$userId/activate'),
+        headers: {'Content-Type': 'application/json'},
+      );
+      return jsonDecode(response.body)['success'] ?? false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  static Future<List<dynamic>> getActiveSanctions() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/admin/sanctions/active'),
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      return [];
+    }
+  }
+
+// Mettez à jour getAllUsers pour inclure les statuts
+  /*
+  static Future<List<dynamic>> getAllUsers() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/admin/users'),
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      return [];
+    }
+  }
+  */
 
 }
