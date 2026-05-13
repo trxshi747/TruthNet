@@ -40,42 +40,38 @@ async function initializeFirstAdmin() {
             roleId = roleResult.records[0].get('r').properties.id;
         }
 
-        // 3. Créer l'utilisateur admin
+        // 3. Créer l'utilisateur admin (sans profil)
         console.log('Création du premier administrateur...');
 
         const hashedPassword = await bcrypt.hash('Admin123!', 10);
         const adminId = randomUUID();
-        const createdAt = new Date().toISOString();
+        const registrationDate = new Date().toISOString();
 
-        // Créer l'utilisateur
-        const userResult = await session.run(
-            `CREATE (u:User {
+        // Créer l'utilisateur avec les labels corrects (sans AuthenticatedUser)
+        await session.run(
+            `CREATE (u:User:Administrator {
                 id: $id,
-                name: $name,
+                firstName: $firstName,
+                lastName: $lastName,
                 username: $username,
                 email: $email,
                 password: $password,
                 status: $status,
-                createdAt: $createdAt
+                registrationDate: $registrationDate
              })
-             RETURN u`,
+             WITH u
+             MATCH (r:Role {name: 'Admin'})
+             CREATE (u)-[:HAS_ROLE]->(r)`,
             {
                 id: adminId,
-                name: 'Admin',
+                firstName: 'System',
+                lastName: 'Admin',
                 username: 'SuperAdmin',
                 email: 'admin@truthnet.com',
                 password: hashedPassword,
-                status: 'Active',
-                createdAt: createdAt
+                status: 'ACTIVE',
+                registrationDate: registrationDate
             }
-        );
-
-        // 4. Créer la relation HAS_ROLE
-        await session.run(
-            `MATCH (u:User {id: $userId})
-             MATCH (r:Role {name: 'Admin'})
-             CREATE (u)-[:HAS_ROLE]->(r)`,
-            { userId: adminId }
         );
 
         console.log('Administrateur créé avec succès !');

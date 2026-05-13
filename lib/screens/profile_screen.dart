@@ -73,7 +73,8 @@ class ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _showEditProfile() {
-    final _nameController = TextEditingController(text: _profileData?['name']);
+    final _firstNameController = TextEditingController(text: _profileData?['firstName']);
+    final _lastNameController = TextEditingController(text: _profileData?['lastName']);
     final _bioController = TextEditingController(text: _profileData?['bio'] ?? "");
     XFile? _newAvatar;
 
@@ -101,16 +102,26 @@ class ProfileScreenState extends State<ProfileScreen> {
                   backgroundColor: const Color(0xFF48426D),
                   backgroundImage: _newAvatar != null 
                     ? (kIsWeb ? NetworkImage(_newAvatar!.path) : FileImage(File(_newAvatar!.path)) as ImageProvider)
-                    : (_profileData?['avatar'] != null ? NetworkImage("http://10.0.2.2:3000${_profileData?['avatar']}") : null),
+                    : (_profileData?['avatar'] != null ? NetworkImage("${ApiService.baseUrl.replaceFirst('/api', '')}${_profileData?['avatar']}") : null),
                   child: _newAvatar == null && _profileData?['avatar'] == null ? const Icon(Icons.camera_alt, color: Colors.white54) : null,
                 ),
               ),
               const SizedBox(height: 20),
               TextField(
-                controller: _nameController,
+                controller: _firstNameController,
                 style: GoogleFonts.spaceMono(color: Colors.white),
                 decoration: InputDecoration(
-                  labelText: "IDENTITY_NAME",
+                  labelText: "FIRST_NAME",
+                  labelStyle: GoogleFonts.spaceMono(color: const Color(0xFFF1AA9B)),
+                  enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.white10)),
+                ),
+              ),
+              const SizedBox(height: 15),
+              TextField(
+                controller: _lastNameController,
+                style: GoogleFonts.spaceMono(color: Colors.white),
+                decoration: InputDecoration(
+                  labelText: "LAST_NAME",
                   labelStyle: GoogleFonts.spaceMono(color: const Color(0xFFF1AA9B)),
                   enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.white10)),
                 ),
@@ -137,10 +148,12 @@ class ProfileScreenState extends State<ProfileScreen> {
                   final auth = Provider.of<AuthProvider>(context, listen: false);
                   await ApiService.updateProfile(
                     auth.user!.id, 
-                    _nameController.text, 
+                    _firstNameController.text,
+                    _lastNameController.text, 
                     _bioController.text,
                     _newAvatar
                   );
+                  auth.updateLocalProfile(_firstNameController.text, _lastNameController.text, _bioController.text);
                   Navigator.pop(context);
                   fetchProfile();
                 },
@@ -183,6 +196,9 @@ class ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildProfileHeader() {
+    String name = "${_profileData?['firstName'] ?? ''} ${_profileData?['lastName'] ?? ''}".trim();
+    if (name.isEmpty) name = "UNKNOWN";
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 25.0),
       child: Row(
@@ -198,10 +214,10 @@ class ProfileScreenState extends State<ProfileScreen> {
               radius: 45,
               backgroundColor: const Color(0xFF48426D),
               backgroundImage: _profileData?['avatar'] != null 
-                ? NetworkImage("http://10.0.2.2:3000${_profileData?['avatar']}") 
+                ? NetworkImage("${ApiService.baseUrl.replaceFirst('/api', '')}${_profileData?['avatar']}") 
                 : null,
               child: _profileData?['avatar'] == null 
-                ? Text(_profileData?['name']?[0].toUpperCase() ?? "U", style: GoogleFonts.righteous(fontSize: 30, color: Colors.white))
+                ? Text(name[0].toUpperCase(), style: GoogleFonts.righteous(fontSize: 30, color: Colors.white))
                 : null,
             ),
           ),
@@ -213,7 +229,7 @@ class ProfileScreenState extends State<ProfileScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(_profileData?['name'] ?? "UNKNOWN", style: GoogleFonts.righteous(fontSize: 22, color: const Color(0xFFF0C38E))),
+                    Text(name, style: GoogleFonts.righteous(fontSize: 22, color: const Color(0xFFF0C38E))),
                     IconButton(
                       icon: const Icon(Icons.settings_outlined, color: Colors.white70, size: 22),
                       onPressed: () {
@@ -224,7 +240,7 @@ class ProfileScreenState extends State<ProfileScreen> {
                     ),
                   ],
                 ),
-                Text("@${_profileData?['name']?.toLowerCase().replaceAll(' ', '_')}", style: GoogleFonts.spaceMono(color: const Color(0xFFF1AA9B), fontSize: 12)),
+                Text("@${_profileData?['username'] ?? 'user'}", style: GoogleFonts.spaceMono(color: const Color(0xFFF1AA9B), fontSize: 12)),
                 const SizedBox(height: 8),
                 Text(_profileData?['bio'] ?? "NO_DATA_AVAILABLE", style: GoogleFonts.spaceMono(color: Colors.white70, fontSize: 11)),
                 const SizedBox(height: 12),

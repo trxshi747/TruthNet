@@ -680,9 +680,12 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(14),
                     child: Image.network(
-                      "http://10.0.2.2:3000$mediaUrl",
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => const Icon(Icons.broken_image, color: Colors.white10),
+                      "${ApiService.baseUrl.replaceFirst('/api', '')}$mediaUrl",
+                      fit: BoxFit.contain, // Changed from cover to contain
+                      errorBuilder: (context, error, stackTrace) {
+                        print("Image Load Error: $error");
+                        return const Icon(Icons.broken_image, color: Colors.white10);
+                      },
                     ),
                   ),
                 ),

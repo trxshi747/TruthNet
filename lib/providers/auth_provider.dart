@@ -6,49 +6,50 @@ enum UserRole { guest, member, moderator, admin }
 class User {
   String id;
   String email;
-  String name;
+  String firstName;
+  String lastName;
   UserRole role;
   String? profileImageUrl;
   String? bio;
-  String? profileColor; // Hex string, e.g., "0xFFF0C38E"
+  String? profileColor;
+  String? registrationDate;
+  String privacyLevel;
 
   User({
     required this.id,
     required this.email,
-    required this.name,
+    required this.firstName,
+    required this.lastName,
     required this.role,
     this.profileImageUrl,
     this.bio,
     this.profileColor,
+    this.registrationDate,
+    this.privacyLevel = 'public',
   });
+
+  String get fullName => '$firstName $lastName';
 
   factory User.fromJson(Map<String, dynamic> json) {
     UserRole role = UserRole.member;
-    if (json['role'] == 'Admin') role = UserRole.admin;
-    if (json['role'] == 'Moderator') role = UserRole.moderator;
-
-    switch ((json['role'] ?? '').toString().toLowerCase()) {
-      case 'admin':
-        role = UserRole.admin;
-        break;
-      case 'moderator':
-        role = UserRole.moderator;
-        break;
-      case 'member':
-        role = UserRole.member;
-        break;
-      default:
-        role = UserRole.guest;
-    }
+    String roleStr = (json['role'] ?? '').toString().toLowerCase();
+    
+    if (roleStr == 'admin') role = UserRole.admin;
+    else if (roleStr == 'moderator') role = UserRole.moderator;
+    else if (roleStr == 'member') role = UserRole.member;
+    else role = UserRole.guest;
 
     return User(
       id: json['id'] ?? '',
       email: json['email'] ?? '',
-      name: json['name'] ?? '',
+      firstName: json['firstName'] ?? '',
+      lastName: json['lastName'] ?? '',
       role: role,
       bio: json['bio'],
       profileImageUrl: json['avatar'],
       profileColor: json['profileColor'],
+      registrationDate: json['registrationDate']?.toString(),
+      privacyLevel: json['privacyLevel'] ?? 'public',
     );
   }
 }
@@ -65,29 +66,29 @@ class AuthProvider with ChangeNotifier {
   bool get isMember => _user?.role == UserRole.member;
   bool get isGuest => _user?.role == UserRole.guest;
 
-  Future<bool> login(String email, String password) async {
+  Future<Map<String, dynamic>> login(String email, String password) async {
     final response = await ApiService.login(email, password);
     if (response['success'] == true) {
       _user = User.fromJson(response['user']);
       notifyListeners();
-      return true;
     }
-    return false;
+    return response;
   }
 
-  Future<bool> register(String email, String password, String name, String role) async {
-    final response = await ApiService.register(email, password, name, role);
+  Future<Map<String, dynamic>> register(String email, String password, String firstName, String lastName, String username, String role) async {
+    final response = await ApiService.register(email, password, firstName, lastName, username, role);
     if (response['success'] == true) {
       _user = User.fromJson(response['user']);
       notifyListeners();
-      return true;
     }
-    return false;
+    return response;
   }
 
-  void updateLocalName(String newName) {
+  void updateLocalProfile(String newFirstName, String newLastName, String newBio) {
     if (_user != null) {
-      _user!.name = newName;
+      _user!.firstName = newFirstName;
+      _user!.lastName = newLastName;
+      _user!.bio = newBio;
       notifyListeners();
     }
   }

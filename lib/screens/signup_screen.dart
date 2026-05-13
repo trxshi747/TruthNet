@@ -11,13 +11,17 @@ class SignUpScreen extends StatefulWidget {
 
 class _SignUpScreenState extends State<SignUpScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _nameController = TextEditingController();
+  final _firstNameController = TextEditingController();
+  final _lastNameController = TextEditingController();
+  final _usernameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
 
   @override
   void dispose() {
-    _nameController.dispose();
+    _firstNameController.dispose();
+    _lastNameController.dispose();
+    _usernameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
@@ -60,16 +64,34 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   ),
                   const SizedBox(height: 40),
                   _buildTextField(
-                    controller: _nameController,
-                    hint: 'FULL_NAME',
+                    controller: _firstNameController,
+                    hint: 'FIRST_NAME',
                     icon: Icons.person_outline_rounded,
                     validator: (value) => value != null && value.isNotEmpty ? null : 'REQUIRED',
                   ),
                   const SizedBox(height: 15),
                   _buildTextField(
+                    controller: _lastNameController,
+                    hint: 'LAST_NAME',
+                    icon: Icons.person_outline_rounded,
+                    validator: (value) => value != null && value.isNotEmpty ? null : 'REQUIRED',
+                  ),
+                   const SizedBox(height: 15),
+                  _buildTextField(
+                    controller: _usernameController,
+                    hint: 'USERNAME',
+                    icon: Icons.alternate_email_rounded,
+                    validator: (value) {
+                      if (value == null || value.isEmpty) return 'REQUIRED';
+                      if (value.contains(' ')) return 'NO_SPACES_ALLOWED';
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 15),
+                  _buildTextField(
                     controller: _emailController,
                     hint: 'EMAIL_ADDRESS',
-                    icon: Icons.alternate_email_rounded,
+                    icon: Icons.email_outlined,
                     validator: (value) =>
                         value != null && value.contains('@') ? null : 'INVALID_EMAIL',
                   ),
@@ -94,18 +116,21 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     ),
                     onPressed: () async {
                       if (_formKey.currentState!.validate()) {
-                        final success = await Provider.of<AuthProvider>(context, listen: false)
+                        final response = await Provider.of<AuthProvider>(context, listen: false)
                             .register(
                                 _emailController.text, 
                                 _passwordController.text,
-                                _nameController.text, 
-                                'Member' // Role is fixed to Member for public signups
+                                _firstNameController.text,
+                                _lastNameController.text,
+                                _usernameController.text,
+                                'Member'
                             );
-                        if (success) {
+                        if (response['success'] == true) {
                           Navigator.pushReplacementNamed(context, '/home');
                         } else {
+                          final message = response['message'] ?? 'REGISTRATION_FAILED';
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('REGISTRATION_FAILED: SYSTEM_ERROR')),
+                            SnackBar(content: Text(message)),
                           );
                         }
                       }

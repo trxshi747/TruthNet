@@ -95,36 +95,26 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     onPressed: () async {
                       if (_formKey.currentState!.validate()) {
-                        final success = await Provider.of<AuthProvider>(context, listen: false).login(
+                        final response = await Provider.of<AuthProvider>(context, listen: false).login(
                           _emailController.text,
                           _passwordController.text,
                         );
-                        final auth = Provider.of<AuthProvider>(context, listen: false);
-                        final role = auth.role;
 
-                        if (success) {
+                        if (response['success'] == true) {
+                          final role = Provider.of<AuthProvider>(context, listen: false).role;
                           if (role == UserRole.admin) {
                             Navigator.pushReplacementNamed(context, '/admin');
-                          }
-                          else if (role == UserRole.moderator) {
+                          } else if (role == UserRole.moderator) {
                             Navigator.pushReplacementNamed(context, '/mod');
-                          }
-                          else if (role == UserRole.member) { // for the members
-                            Navigator.pushReplacementNamed(context, '/home');
                           } else {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text(
-                                  'LOGIN_FAILED: UNKNOWN_IDENTITY')),
-                            );
+                            Navigator.pushReplacementNamed(context, '/home');
                           }
-                        }
-                        /*if (success) {
-                          Navigator.pushReplacementNamed(context, '/home');
                         } else {
+                          final message = response['message'] ?? 'LOGIN_FAILED: UNKNOWN_ERROR';
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('LOGIN_FAILED: UNKNOWN_IDENTITY')),
+                            SnackBar(content: Text(message)),
                           );
-                        }*/
+                        }
                       }
                     },
                     child: Text(
@@ -162,17 +152,19 @@ class _LoginScreenState extends State<LoginScreen> {
                           fontSize: 12,
                         ),
                       ),
-                      TextButton(
-                        onPressed: () {
-                          Navigator.pushNamed(context, '/signup');
-                        },
-                        child: Text(
-                          "CREATE_IDENTITY",
-                          style: GoogleFonts.spaceMono(
-                            color: const Color(0xFFF0C38E),
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                            decoration: TextDecoration.underline,
+                      Flexible(
+                        child: TextButton(
+                          onPressed: () {
+                            Navigator.pushNamed(context, '/signup');
+                          },
+                          child: Text(
+                            "CREATE_IDENTITY",
+                            style: GoogleFonts.spaceMono(
+                              color: const Color(0xFFF0C38E),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                              decoration: TextDecoration.underline,
+                            ),
                           ),
                         ),
                       ),

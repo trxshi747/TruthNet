@@ -236,13 +236,13 @@ class _PostScreenState extends State<PostScreen> {
       children: [
         CircleAvatar(
           backgroundColor: const Color(0xFFF1AA9B),
-          child: Text(auth.user?.name[0] ?? 'U', style: const TextStyle(color: Color(0xFF312C51))),
+          child: Text(auth.user?.fullName[0] ?? 'U', style: const TextStyle(color: Color(0xFF312C51))),
         ),
         const SizedBox(width: 12),
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(auth.user?.name ?? 'USER', style: GoogleFonts.spaceMono(fontWeight: FontWeight.bold)),
+            Text(auth.user?.fullName ?? 'USER', style: GoogleFonts.spaceMono(fontWeight: FontWeight.bold)),
             if (_locationString != null)
               Text(
                 "📍 ${_placeName != null ? '$_placeName ' : ''}($_locationString)", 

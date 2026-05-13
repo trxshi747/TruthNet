@@ -20,15 +20,22 @@ class ApiService {
     } catch (e) { return {'success': false}; }
   }
 
-  static Future<Map<String, dynamic>> register(String email, String password, String name, String role) async {
+  static Future<Map<String, dynamic>> register(String email, String password, String firstName, String lastName, String username, String role) async {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/auth/register'),
-        body: jsonEncode({'email': email, 'password': password, 'name': name, 'role': role}),
+        body: jsonEncode({
+          'email': email,
+          'password': password,
+          'firstName': firstName,
+          'lastName': lastName,
+          'username': username,
+          'role': role
+        }),
         headers: {'Content-Type': 'application/json'},
       );
       return jsonDecode(response.body);
-    } catch (e) { return {'success': false}; }
+    } catch (e) { return {'success': false, 'message': e.toString()}; }
   }
 
   static Future<Map<String, dynamic>> createPost({
@@ -111,10 +118,11 @@ class ApiService {
     } catch (e) { return {}; }
   }
 
-  static Future<bool> updateProfile(String userId, String name, String bio, XFile? avatar) async {
+  static Future<bool> updateProfile(String userId, String firstName, String lastName, String bio, XFile? avatar) async {
     try {
       var request = http.MultipartRequest('PUT', Uri.parse('$baseUrl/users/$userId/profile'));
-      request.fields['name'] = name;
+      request.fields['firstName'] = firstName;
+      request.fields['lastName'] = lastName;
       request.fields['bio'] = bio;
 
       if (avatar != null) {

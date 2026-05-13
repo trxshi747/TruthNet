@@ -56,44 +56,74 @@ app.post('/api/auth/register', async (req, res) => {
 });
 */
 
-// POST /api/auth/register — version corrigée avec Profile séparé
+// POST /api/auth/register - Final version with conditional profile and unique username
 app.post('/api/auth/register', async (req, res) => {
-  const { email, password, name, role } = req.body;
+  const { email, password, firstName, lastName, username, role } = req.body;
   const session = driver.session();
   try {
+    // Check for existing email or username
     const check = await session.run(
-      'MATCH (u:User {email: $email}) RETURN u', { email }
+      'MATCH (u:User) WHERE u.email = $email OR u.username = $username RETURN u.email, u.username', 
+      { email, username }
     );
-    if (check.records.length > 0)
-      return res.status(400).json({ success: false, message: "User exists" });
+    if (check.records.length > 0) {
+        const existing = check.records[0];
+        if (existing.get('email') === email) {
+            return res.status(400).json({ success: false, field: 'email', message: "EMAIL_EXISTS" });
+        }
+        if (existing.get('username') === username) {
+            return res.status(400).json({ success: false, field: 'username', message: "USERNAME_TAKEN" });
+        }
+    }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const username = name.toLowerCase().replace(/\s+/g, '_')
-                     + '_' + Date.now().toString().slice(-4);
+    const targetRole = role || "Member";
+    const isStandardUser = targetRole === "Member";
 
-    const result = await session.run(`
-      MERGE (r:Role {name: $roleName})
-      CREATE (u:User {
-        id:         randomUUID(),
-        name:       $name,
-        username:   $username,
-        email:      $email,
-        password:   $hashedPassword,
-        status:     'ACTIVE',
-        createdAt:  timestamp()
-      })
-      CREATE (p:Profile {
-        id:                  randomUUID(),
-        bio:                 '',
-        avatar:              null,
-        confidentiality_level: 'public',
-        subscribers_count:   0,
-        subscribing_count:   0
-      })
-      CREATE (u)-[:HAS_ROLE]->(r)
-      CREATE (u)-[:HAS_PROFILE]->(p)
-      RETURN u, r.name as role, p
-    `, { email, hashedPassword, name, username, roleName: role || "Member" });
+    let result;
+    if (isStandardUser) {
+        result = await session.run(`
+          MERGE (r:Role {name: $roleName})
+          CREATE (u:User:AuthenticatedUser {
+            id:               randomUUID(),
+            firstName:        $firstName,
+            lastName:         $lastName,
+            username:         $username,
+            email:            $email,
+            password:         $hashedPassword,
+            status:           'ACTIVE',
+            registrationDate: timestamp()
+          })
+          CREATE (p:Profile {
+            id:              randomUUID(),
+            bio:             '',
+            avatar:          null,
+            privacyLevel:    'public',
+            followerCount:   0,
+            followingCount:  0
+          })
+          CREATE (u)-[:HAS_ROLE]->(r)
+          CREATE (u)-[:HAS_PROFILE]->(p)
+          RETURN u, r.name as role
+        `, { email, hashedPassword, firstName, lastName, username, roleName: targetRole });
+    } else {
+        const userLabel = targetRole === "Admin" ? "Administrator" : "Moderator";
+        result = await session.run(`
+          MERGE (r:Role {name: $roleName})
+          CREATE (u:User:${userLabel} {
+            id:               randomUUID(),
+            firstName:        $firstName,
+            lastName:         $lastName,
+            username:         $username,
+            email:            $email,
+            password:         $hashedPassword,
+            status:           'ACTIVE',
+            registrationDate: timestamp()
+          })
+          CREATE (u)-[:HAS_ROLE]->(r)
+          RETURN u, r.name as role
+        `, { email, hashedPassword, firstName, lastName, username, roleName: targetRole });
+    }
 
     const user = result.records[0].get('u').properties;
     res.json({
@@ -161,7 +191,7 @@ app.put('/api/auth/update-email', async (req, res) => {
 // I just changed the place of those functions , since it is advised to have the static routes first
 
 app.post('/api/auth/admin/register', async (req, res) => {
-    const { email, password, name, username, role } = req.body;
+    const { email, password, firstName, lastName, username, role } = req.body;
     const session = driver.session();
     try {
         const check = await session.run('MATCH (u:User {email: $email}) RETURN u', { email });
@@ -170,10 +200,19 @@ app.post('/api/auth/admin/register', async (req, res) => {
         const hashedPassword = await bcrypt.hash(password, 10);
         const result = await session.run(
             `MERGE (r:Role {name: $roleName})
-             CREATE (u:User {id: randomUUID(), email: $email, password: $hashedPassword, name: $name, username: $username,  status: "Active", bio: "INITIATING_BIOGRAPHY...", createdAt: timestamp()})
+             CREATE (u:User:AuthenticatedUser:Administrator {
+                id: randomUUID(), 
+                email: $email, 
+                password: $hashedPassword, 
+                firstName: $firstName, 
+                lastName: $lastName, 
+                username: $username,  
+                status: "ACTIVE", 
+                registrationDate: timestamp()
+             })
              CREATE (u)-[:HAS_ROLE]->(r)
              RETURN u, r.name as role`,
-            { email, hashedPassword, name, username, roleName: role || "Member" }
+            { email, hashedPassword, firstName, lastName, username, roleName: role || "Admin" }
         );
         res.json({ success: true, user: { ...result.records[0].get('u').properties, role: result.records[0].get('role') } });
     } catch (e) {
@@ -187,15 +226,15 @@ app.get('/api/feed', async (req, res) => {
     const session = driver.session();
     try {
         const result = await session.run(
-            `MATCH (u:User)-[:POSTED]->(p:Post)
-             WHERE p.isPublic = true AND (p.isDeleted IS NULL OR p.isDeleted = false)
-             RETURN u.name as author, u.id as authorId, p as post,
-                    COUNT { (p)<-[:LIKED]-() } as likeCount,
-                    COUNT { (p)<-[:ON]-(:Comment) } as commentCount,
+            `MATCH (u:User)-[:OWNS_POST]->(p:Post)
+             WHERE p.visibility = 'public' AND (p.isDeleted IS NULL OR p.isDeleted = false)
+             RETURN u.firstName + " " + u.lastName as author, u.id as authorId, p as post,
+                    COUNT { (p)<-[:HAS_REACTION]-() } as likeCount,
+                    COUNT { (p)<-[:HAS_COMMENT]-() } as commentCount,
                     COUNT { (p)<-[:SHARED]-() } as shareCount,
                     EXISTS { (p)<-[:SAVED]-(:User {id: $userId}) } as isSaved,
-                    EXISTS { (p)<-[:LIKED]-(:User {id: $userId}) } as isLiked
-             ORDER BY p.timestamp DESC`,
+                    EXISTS { (p)<-[:HAS_REACTION]-(r:Reaction {targetType: 'Post'})<-[:OWNS_REACTION]-(:User {id: $userId}) } as isLiked
+             ORDER BY p.createdAt DESC`,
             { userId: userId || "" }
         );
         res.json(result.records.map(r => ({
@@ -218,8 +257,8 @@ app.get('/api/users/search', async (req, res) => {
     try {
         const result = await session.run(
             `MATCH (u:User)
-             WHERE toLower(u.name) CONTAINS toLower($query)
-             RETURN u.name as name, u.id as id LIMIT 5`,
+             WHERE toLower(u.firstName) CONTAINS toLower($query) OR toLower(u.lastName) CONTAINS toLower($query)
+             RETURN u.firstName + " " + u.lastName as name, u.id as id LIMIT 5`,
             { query: query || "" }
         );
         res.json(result.records.map(r => ({ name: r.get('name'), id: r.get('id') })));
@@ -232,12 +271,31 @@ app.post('/api/posts/like', async (req, res) => {
     const { userId, postId } = req.body;
     const session = driver.session();
     try {
-        const check = await session.run('MATCH (u:User {id: $userId})-[l:LIKED]->(p:Post {id: $postId}) RETURN l', { userId, postId });
+        const check = await session.run(
+            'MATCH (u:User {id: $userId})-[:OWNS_REACTION]->(r:Reaction {targetType: "Post"})-[:TARGETS]->(p:Post {id: $postId}) RETURN r',
+            { userId, postId }
+        );
+        
         if (check.records.length > 0) {
-            await session.run('MATCH (u:User {id: $userId})-[l:LIKED]->(p:Post {id: $postId}) DELETE l', { userId, postId });
+            await session.run(
+                'MATCH (u:User {id: $userId})-[:OWNS_REACTION]->(r:Reaction {targetType: "Post"})-[:TARGETS]->(p:Post {id: $postId}) DETACH DELETE r',
+                { userId, postId }
+            );
             res.json({ success: true, action: 'unliked' });
         } else {
-            await session.run('MATCH (u:User {id: $userId}), (p:Post {id: $postId}) MERGE (u)-[:LIKED]->(p)', { userId, postId });
+            await session.run(`
+                MATCH (u:User {id: $userId})
+                MATCH (p:Post {id: $postId})
+                CREATE (r:Reaction {
+                    id: randomUUID(),
+                    type: 'LIKE',
+                    targetType: 'Post',
+                    createdAt: timestamp()
+                })
+                CREATE (u)-[:OWNS_REACTION]->(r)
+                CREATE (r)-[:TARGETS]->(p)
+                CREATE (p)-[:HAS_REACTION]->(r)
+            `, { userId, postId });
             res.json({ success: true, action: 'liked' });
         }
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
@@ -324,27 +382,45 @@ app.get('/api/users/:userId/profile', async (req, res) => {
     const { userId } = req.params;
     const session = driver.session();
     try {
-        const result = await session.run(
-            `MATCH (u:User {id: $userId})
-             OPTIONAL MATCH (u)-[:POSTED]->(p:Post) WHERE p.isDeleted IS NULL OR p.isDeleted = false
-             OPTIONAL MATCH (u)-[:FOLLOWS]->(following)
-             OPTIONAL MATCH (follower)-[:FOLLOWS]->(u)
-             RETURN u,
+        // Check if user is an admin or moderator first
+        const roleResult = await session.run(
+            `MATCH (u:User {id: $userId})-[:HAS_ROLE]->(r:Role)
+             WHERE r.name IN ['Admin', 'Moderator']
+             RETURN u, r.name as role`,
+            { userId }
+        );
+
+        if (roleResult.records.length > 0) {
+            const user = roleResult.records[0].get('u').properties;
+            const role = roleResult.records[0].get('role');
+            return res.json({ ...user, role, hasProfile: false });
+        }
+
+        // Standard user with a profile
+        const profileResult = await session.run(
+            `MATCH (u:User {id: $userId})-[:HAS_PROFILE]->(profile:Profile)
+             OPTIONAL MATCH (u)-[:OWNS_POST]->(p:Post) WHERE p.isDeleted IS NULL OR p.isDeleted = false
+             OPTIONAL MATCH (profile)-[:HAS_FOLLOWING]->(following:Following)
+             OPTIONAL MATCH (profile)-[:HAS_FOLLOWER]->(follower:Follower)
+             RETURN u, profile,
                     count(DISTINCT p) as postCount,
                     count(DISTINCT following) as followingCount,
                     count(DISTINCT follower) as followerCount`,
             { userId }
         );
-        if (result.records.length > 0) {
-            const user = result.records[0].get('u').properties;
+        if (profileResult.records.length > 0) {
+            const user = profileResult.records[0].get('u').properties;
+            const profile = profileResult.records[0].get('profile').properties;
             res.json({
                 ...user,
-                postCount: result.records[0].get('postCount').toInt(),
-                followingCount: result.records[0].get('followingCount').toInt(),
-                followerCount: result.records[0].get('followerCount').toInt()
+                ...profile,
+                postCount: profileResult.records[0].get('postCount').toInt(),
+                followingCount: profileResult.records[0].get('followingCount').toInt(),
+                followerCount: profileResult.records[0].get('followerCount').toInt(),
+                hasProfile: true
             });
         } else {
-            res.status(404).json({ message: "USER_NOT_FOUND" });
+            res.status(404).json({ message: "USER_OR_PROFILE_NOT_FOUND" });
         }
     } catch (e) { res.status(500).send(e.message); }
     finally { await session.close(); }
@@ -352,17 +428,17 @@ app.get('/api/users/:userId/profile', async (req, res) => {
 
 app.put('/api/users/:userId/profile', upload.single('avatar'), async (req, res) => {
     const { userId } = req.params;
-    const { name, bio } = req.body;
+    const { firstName, lastName, bio } = req.body;
     const avatarUrl = req.file ? `/uploads/${req.file.filename}` : undefined;
 
     const session = driver.session();
     try {
-        let query = 'MATCH (u:User {id: $userId}) SET u.name = $name, u.bio = $bio';
-        if (avatarUrl) query += ', u.avatar = $avatarUrl';
-        query += ' RETURN u';
+        let query = 'MATCH (u:User {id: $userId})-[:HAS_PROFILE]->(p:Profile) SET u.firstName = $firstName, u.lastName = $lastName, p.bio = $bio';
+        if (avatarUrl) query += ', p.avatar = $avatarUrl';
+        query += ' RETURN u, p';
 
-        const result = await session.run(query, { userId, name, bio, avatarUrl });
-        res.json({ success: true, user: result.records[0].get('u').properties });
+        const result = await session.run(query, { userId, firstName, lastName, bio, avatarUrl });
+        res.json({ success: true, user: result.records[0].get('u').properties, profile: result.records[0].get('p').properties });
     } catch (e) { res.status(500).send(e.message); }
     finally { await session.close(); }
 });
@@ -372,10 +448,10 @@ app.get('/api/users/:userId/posts', async (req, res) => {
     const session = driver.session();
     try {
         const result = await session.run(
-            `MATCH (u:User {id: $userId})-[:POSTED]->(p:Post)
+            `MATCH (u:User {id: $userId})-[:OWNS_POST]->(p:Post)
              WHERE p.isDeleted IS NULL OR p.isDeleted = false
-             RETURN u.name as author, p as post
-             ORDER BY p.timestamp DESC`,
+             RETURN u.firstName + " " + u.lastName as author, p as post
+             ORDER BY p.createdAt DESC`,
             { userId }
         );
         res.json(result.records.map(r => ({ author: r.get('author'), ...r.get('post').properties })));
@@ -388,10 +464,10 @@ app.get('/api/users/:userId/archive', async (req, res) => {
     const session = driver.session();
     try {
         const result = await session.run(
-            `MATCH (u:User {id: $userId})-[:POSTED]->(p:Post)
+            `MATCH (u:User {id: $userId})-[:OWNS_POST]->(p:Post)
              WHERE p.isDeleted = true
-             RETURN u.name as author, p as post
-             ORDER BY p.timestamp DESC`,
+             RETURN u.firstName + " " + u.lastName as author, p as post
+             ORDER BY p.createdAt DESC`,
             { userId }
         );
         res.json(result.records.map(r => ({ author: r.get('author'), ...r.get('post').properties })));
@@ -403,7 +479,7 @@ app.get('/api/users/:userId/archive', async (req, res) => {
 
 app.post('/api/posts', upload.single('media'), async (req, res) => {
     const { userId, content, location } = req.body;
-    const isPublic = req.body.isPublic === 'true';
+    const visibility = req.body.isPublic === 'true' ? 'public' : 'private';
     const isVideo = req.body.isVideo === 'true';
     const mediaUrl = req.file ? `/uploads/${req.file.filename}` : null;
 
@@ -411,10 +487,19 @@ app.post('/api/posts', upload.single('media'), async (req, res) => {
     try {
         const result = await session.run(
             `MATCH (u:User {id: $userId})
-             CREATE (p:Post {id: randomUUID(), content: $content, mediaUrl: $mediaUrl, location: $location, isVideo: $isVideo, isPublic: $isPublic, isDeleted: false, timestamp: timestamp()})
-             CREATE (u)-[:POSTED]->(p)
+             CREATE (p:Post {
+                id: randomUUID(), 
+                content: $content, 
+                mediaUrl: $mediaUrl, 
+                location: $location, 
+                isVideo: $isVideo, 
+                visibility: $visibility, 
+                isDeleted: false, 
+                createdAt: timestamp()
+             })
+             CREATE (u)-[:OWNS_POST]->(p)
              RETURN p`,
-            { userId, content, mediaUrl, location: location || null, isVideo, isPublic }
+            { userId, content, mediaUrl, location: location || null, isVideo, visibility }
         );
         res.json(result.records[0].get('p').properties);
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
@@ -430,8 +515,8 @@ app.put('/api/posts/:postId', async (req, res) => {
     const session = driver.session();
     try {
         const result = await session.run(
-            `MATCH (u:User {id: $userId})-[:POSTED]->(p:Post {id: $postId})
-             WHERE (p.isDeleted IS NULL OR p.isDeleted = false) AND p.timestamp > timestamp() - (24 * 60 * 60 * 1000)
+            `MATCH (u:User {id: $userId})-[:OWNS_POST]->(p:Post {id: $postId})
+             WHERE (p.isDeleted IS NULL OR p.isDeleted = false) AND p.createdAt > timestamp() - (24 * 60 * 60 * 1000)
              SET p.content = $content, p.isEdited = true, p.updatedAt = timestamp()
              RETURN p`,
             { postId, userId, content }
@@ -451,7 +536,7 @@ app.post('/api/posts/:postId/archive', async (req, res) => {
     const session = driver.session();
     try {
         const result = await session.run(
-            `MATCH (u:User {id: $userId})-[:POSTED]->(p:Post {id: $postId})
+            `MATCH (u:User {id: $userId})-[:OWNS_POST]->(p:Post {id: $postId})
              SET p.isDeleted = true, p.deletedAt = timestamp()
              RETURN p`,
             { postId, userId }
@@ -471,7 +556,7 @@ app.delete('/api/posts/:postId/permanent', async (req, res) => {
     const session = driver.session();
     try {
         const result = await session.run(
-            `MATCH (u:User {id: $userId})-[:POSTED]->(p:Post {id: $postId})
+            `MATCH (u:User {id: $userId})-[:OWNS_POST]->(p:Post {id: $postId})
              DETACH DELETE p
              RETURN count(p) as deletedCount`,
             { postId, userId }
@@ -494,11 +579,11 @@ app.get('/api/posts/:postId/comments', async (req, res) => {
     const session = driver.session();
     try {
         const result = await session.run(
-            `MATCH (u:User)-[:COMMENTED]->(c:Comment)-[:ON]->(p:Post {id: $postId})
-             RETURN u.name as author, c as comment,
-                    COUNT { (c)<-[:LIKED]-() } as likeCount,
+            `MATCH (u:User)-[:OWNS_COMMENT]->(c:Comment)-[:TARGETS]->(p:Post {id: $postId})
+             RETURN u.firstName + " " + u.lastName as author, c as comment,
+                    COUNT { (c)<-[:HAS_REACTION]-() } as likeCount,
                     COUNT { (c)<-[:REPLIED_TO]-(:Comment) } as replyCount
-             ORDER BY c.timestamp ASC`,
+             ORDER BY c.createdAt ASC`,
             { postId }
         );
         res.json(result.records.map(r => ({
@@ -518,14 +603,50 @@ app.post('/api/comments/:commentId/like', async (req, res) => {
     const { commentId } = req.params;
     const session = driver.session();
     try {
-        const check = await session.run('MATCH (u:User {id: $userId})-[l:LIKED]->(c:Comment {id: $commentId}) RETURN l', { userId, commentId });
+        const check = await session.run(
+            'MATCH (u:User {id: $userId})-[:OWNS_REACTION]->(r:Reaction {targetType: "Comment"})-[:TARGETS]->(c:Comment {id: $commentId}) RETURN r',
+            { userId, commentId }
+        );
         if (check.records.length > 0) {
-            await session.run('MATCH (u:User {id: $userId})-[l:LIKED]->(c:Comment {id: $commentId}) DELETE l', { userId, commentId });
+            await session.run(
+                'MATCH (u:User {id: $userId})-[:OWNS_REACTION]->(r:Reaction {targetType: "Comment"})-[:TARGETS]->(c:Comment {id: $commentId}) DETACH DELETE r',
+                { userId, commentId }
+            );
             res.json({ success: true, action: 'unliked' });
         } else {
-            await session.run('MATCH (u:User {id: $userId}), (c:Comment {id: $commentId}) MERGE (u)-[:LIKED]->(c)', { userId, commentId });
+            await session.run(`
+                MATCH (u:User {id: $userId})
+                MATCH (c:Comment {id: $commentId})
+                CREATE (r:Reaction {
+                    id: randomUUID(),
+                    type: 'LIKE',
+                    targetType: 'Comment',
+                    createdAt: timestamp()
+                })
+                CREATE (u)-[:OWNS_REACTION]->(r)
+                CREATE (r)-[:TARGETS]->(c)
+                CREATE (c)-[:HAS_REACTION]->(r)
+            `, { userId, commentId });
             res.json({ success: true, action: 'liked' });
         }
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+    finally { await session.close(); }
+});
+
+app.post('/api/posts/comment', async (req, res) => {
+    const { userId, postId, content } = req.body;
+    const session = driver.session();
+    try {
+        const result = await session.run(
+            `MATCH (u:User {id: $userId}), (p:Post {id: $postId})
+             CREATE (c:Comment {id: randomUUID(), content: $content, createdAt: timestamp()})
+             CREATE (u)-[:OWNS_COMMENT]->(c)
+             CREATE (c)-[:TARGETS]->(p)
+             CREATE (p)-[:HAS_COMMENT]->(c)
+             RETURN c`,
+            { userId, postId, content }
+        );
+        res.json({ success: true, comment: result.records[0].get('c').properties });
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
     finally { await session.close(); }
 });
@@ -537,8 +658,9 @@ app.post('/api/comments/:commentId/reply', async (req, res) => {
     try {
         const result = await session.run(
             `MATCH (u:User {id: $userId}), (target:Comment {id: $commentId})
-             CREATE (reply:Comment {id: randomUUID(), content: $content, timestamp: timestamp()})
-             CREATE (u)-[:COMMENTED]->(reply)-[:REPLIED_TO]->(target)
+             CREATE (reply:Comment {id: randomUUID(), content: $content, createdAt: timestamp()})
+             CREATE (u)-[:OWNS_COMMENT]->(reply)
+             CREATE (reply)-[:REPLIED_TO]->(target)
              RETURN reply`,
             { userId, commentId, content }
         );
@@ -552,11 +674,11 @@ app.get('/api/comments/:commentId/replies', async (req, res) => {
     const session = driver.session();
     try {
         const result = await session.run(
-            `MATCH (u:User)-[:COMMENTED]->(reply:Comment)-[:REPLIED_TO]->(target:Comment {id: $commentId})
-             RETURN u.name as author, reply,
-                    COUNT { (reply)<-[:LIKED]-() } as likeCount,
+            `MATCH (u:User)-[:OWNS_COMMENT]->(reply:Comment)-[:REPLIED_TO]->(target:Comment {id: $commentId})
+             RETURN u.firstName + " " + u.lastName as author, reply,
+                    COUNT { (reply)<-[:HAS_REACTION]-() } as likeCount,
                     COUNT { (reply)<-[:REPLIED_TO]-(:Comment) } as replyCount
-             ORDER BY reply.timestamp ASC`,
+             ORDER BY reply.createdAt ASC`,
             { commentId }
         );
         res.json(result.records.map(r => ({
@@ -581,29 +703,31 @@ app.get('/api/admin/users', async (req, res) => {
             OPTIONAL MATCH (u)-[:HAS_PROFILE]->(p:Profile)
             OPTIONAL MATCH (u)-[:HAS_SANCTION]->(s:Sanction {status: 'ACTIVE'})
             RETURN
-                u.id            AS id,
-                u.name          AS name,
-                u.username      AS username,
-                u.email         AS email,
-                u.status        AS status,
-                u.createdAt     AS createdAt,
-                r.name          AS role,
-                p.bio           AS bio,
-                p.avatar        AS avatar,
-                s.id            AS sanctionId,
-                s.type          AS sanctionType,
-                s.reason        AS sanctionReason,
-                s.ending_date   AS sanctionEndDate
+                u.id                AS id,
+                u.firstName         AS firstName,
+                u.lastName          AS lastName,
+                u.username          AS username,
+                u.email             AS email,
+                u.status            AS status,
+                u.registrationDate  AS registrationDate,
+                r.name              AS role,
+                p.bio               AS bio,
+                p.avatar            AS avatar,
+                s.id                AS sanctionId,
+                s.type              AS sanctionType,
+                s.reason            AS sanctionReason,
+                s.endDate           AS sanctionEndDate
         `);
 
         const users = result.records.map(record => {
             const raw = {
                 id:        record.get('id'),
-                name:      record.get('name'),
+                firstName: record.get('firstName'),
+                lastName:  record.get('lastName'),
                 username:  record.get('username'),
                 email:     record.get('email'),
                 status:    record.get('status'),
-                createdAt: record.get('createdAt'),
+                registrationDate: record.get('registrationDate'),
                 role:      record.get('role'),
                 bio:       record.get('bio'),
                 avatar:    record.get('avatar'),
@@ -613,20 +737,17 @@ app.get('/api/admin/users', async (req, res) => {
                 sanctionEndDate: record.get('sanctionEndDate'),
             };
 
-            // Log pour debug
-            console.log('RAW user:', JSON.stringify(raw));
-
             return {
-                id:       raw.id       ?? 'no-id',
-                name:     raw.name     ?? 'Unknown',
-                username: raw.username ?? raw.name?.toLowerCase().replace(/\s+/g, '_') ?? 'unknown',
-                email:    raw.email    ?? '',
-                // Normalise status côté backend aussi
+                id:       raw.id,
+                firstName: raw.firstName ?? 'Unknown',
+                lastName:  raw.lastName ?? '',
+                username: raw.username,
+                email:    raw.email ?? '',
                 status:   (raw.status ?? 'ACTIVE').toUpperCase(),
-                createdAt: raw.createdAt ?? null,
-                role:     raw.role     ?? 'Member',
+                registrationDate: raw.registrationDate ?? null,
+                role:     raw.role ?? 'Member',
                 profile: {
-                    bio:    raw.bio    ?? '',
+                    bio:    raw.bio ?? '',
                     avatar: raw.avatar ?? null,
                 },
                 activeSanction: raw.sanctionId ? {
@@ -638,7 +759,6 @@ app.get('/api/admin/users', async (req, res) => {
             };
         });
 
-        console.log(`✅ Returning ${users.length} users`);
         res.json(users);
 
     } catch (error) {
@@ -668,11 +788,11 @@ app.put('/api/admin/users/:userId/suspend', async (req, res) => {
         id:            $sanctionId,
         type:          'SUSPENDED',
         reason:        $reason,
-        starting_date: $startDate,
-        ending_date:   $endDate,
+        startDate:     $startDate,
+        endDate:       $endDate,
         status:        'ACTIVE',
-        created_by:    $adminId,
-        creation_date: datetime()
+        createdBy:     $adminId,
+        createdAt:     timestamp()
       })
       CREATE (u)-[:HAS_SANCTION]->(s)
       SET u.status = 'SUSPENDED',
@@ -702,46 +822,31 @@ app.put('/api/admin/users/:userId/ban', async (req, res) => {
 
     const session = driver.session();
     const sanctionId = require('crypto').randomUUID();
-    const startDate = new Date();
+    const startDate = new Date().toISOString();
 
     try {
-        // 1. Create sanction node
         await session.run(
-            `CREATE (s:Sanction {
+            `MATCH (u:User {id: $userId})
+             CREATE (s:Sanction {
                 id: $id,
-                userId: $userId,
                 type: 'BAN',
                 reason: $reason,
                 startDate: $startDate,
                 status: 'ACTIVE',
-                issuedBy: $adminId,
-                issuedAt: datetime()
+                createdBy: $adminId,
+                createdAt: timestamp()
             })
-            RETURN s`,
+            CREATE (u)-[:HAS_SANCTION]->(s)
+            SET u.status = 'BANNED',
+                u.activeSanctionId = $id
+            RETURN u, s`,
             {
                 id: sanctionId,
                 userId,
                 reason,
-                startDate: startDate.toISOString(),
+                startDate,
                 adminId
             }
-        );
-
-        // 2. Update user status
-        await session.run(
-            `MATCH (u:User {id: $userId})
-             SET u.status = 'BANNED',
-                 u.activeSanctionId = $sanctionId
-             RETURN u`,
-            { userId, sanctionId }
-        );
-
-        // 3. Create relationship
-        await session.run(
-            `MATCH (u:User {id: $userId})
-             MATCH (s:Sanction {id: $sanctionId})
-             CREATE (u)-[:HAS_SANCTION]->(s)`,
-            { userId, sanctionId }
         );
 
         res.json({
@@ -768,8 +873,8 @@ app.put('/api/admin/sanctions/:sanctionId/revoke', async (req, res) => {
     try {
         // 1. Get sanction details
         const sanctionResult = await session.run(
-            `MATCH (s:Sanction {id: $sanctionId})
-             RETURN s.userId as userId, s.type as type`,
+            `MATCH (s:Sanction {id: $sanctionId})<-[:HAS_SANCTION]-(u:User)
+             RETURN u.id as userId, s.type as type`,
             { sanctionId }
         );
 
@@ -787,7 +892,7 @@ app.put('/api/admin/sanctions/:sanctionId/revoke', async (req, res) => {
             `MATCH (s:Sanction {id: $sanctionId})
              SET s.status = 'REVOKED',
                  s.revokedBy = $adminId,
-                 s.revokedAt = datetime()
+                 s.revokedAt = timestamp()
              RETURN s`,
             { sanctionId, adminId }
         );
@@ -918,11 +1023,12 @@ app.get('/api/admin/sanctions/active', async (req, res) => {
                     startDate: sanction.startDate,
                     endDate: sanction.endDate,
                     status: sanction.status,
-                    issuedBy: sanction.issuedBy
+                    createdBy: sanction.createdBy
                 },
                 user: {
                     id: user.id,
-                    name: user.name,
+                    firstName: user.firstName,
+                    lastName: user.lastName,
                     email: user.email,
                     username: user.username
                 }
@@ -949,12 +1055,11 @@ async function autoLiftExpiredSuspensions() {
         const expired = await session.run(`
             MATCH (s:Sanction {type: 'SUSPENSION', status: 'ACTIVE'})
             WHERE s.endDate < datetime($now)
-            RETURN s.id as sanctionId, s.userId as userId
+            RETURN s.id as sanctionId
         `, { now });
 
         for (const record of expired.records) {
             const sanctionId = record.get('sanctionId');
-            const userId = record.get('userId');
 
             // Mark sanction as expired
             await session.run(`
@@ -964,12 +1069,12 @@ async function autoLiftExpiredSuspensions() {
 
             // Reactivate user
             await session.run(`
-                MATCH (u:User {id: $userId})
+                MATCH (u:User)-[:HAS_SANCTION]->(s:Sanction {id: $sanctionId})
                 SET u.status = 'ACTIVE',
                     u.activeSanctionId = null
-            `, { userId });
+            `, { sanctionId });
 
-            console.log(`✅ Auto-lifted suspension for user ${userId}`);
+            console.log(`✅ Auto-lifted suspension for sanction ${sanctionId}`);
         }
 
         if (expired.records.length > 0) {
@@ -1014,28 +1119,29 @@ app.get('/api/admin/moderators', async (req, res) => {
 
 // add moderator
 app.post('/api/admin/moderators', async (req, res) => {
-    const { name, username, email, password, status, role } = req.body;
+    const { firstName, lastName, username, email, password, status } = req.body;
     const session = driver.session();
 
     try {
         const hashedPassword = await bcrypt.hash(password, 10);
 
-        const result = await session.run(`
+        await session.run(`
             MERGE (r:Role {name: "Moderator"})
-            CREATE (u:User {
-                id: randomUUID(),
-                name: $name,
-                username: $username,
-                email: $email,
-                password: $password,
-                status: $status,
-                createdAt: timestamp()
+            CREATE (u:User:AuthenticatedUser:Moderator {
+                id:               randomUUID(),
+                firstName:        $firstName,
+                lastName:         $lastName,
+                username:         $username,
+                email:            $email,
+                password:         $hashedPassword,
+                status:           $status,
+                registrationDate: timestamp()
             })
             CREATE (u)-[:HAS_ROLE]->(r)
             RETURN u
         `, {
-            name, username, email,
-            password: hashedPassword,
+            firstName, lastName, username, email,
+            hashedPassword,
             status
         });
 
@@ -1048,82 +1154,9 @@ app.post('/api/admin/moderators', async (req, res) => {
     }
 });
 
-//update moderator
-/*
 app.put('/api/admin/moderators/:id', async (req, res) => {
     const { id } = req.params;
-    const data = req.body;
-
-    const session = driver.session();
-
-    try {
-        await session.run(`
-            MATCH (u:User {id: $id})
-            SET u.name = $name,
-                u.username = $username,
-                u.email = $email,
-                u.status = $status
-        `, { id, ...data });
-
-        res.json({ success: true });
-
-    } catch (e) {
-        res.status(500).json({ success: false });
-    } finally {
-        await session.close();
-    }
-});
-*/
-
-/*
-app.put('/api/admin/moderators/:id', async (req, res) => {
-    const { id } = req.params;
-    const { name, username, email, status, role } = req.body;
-
-    const session = driver.session();
-
-    try {
-        // 1. Mettre à jour les propriétés de base de l'utilisateur
-        await session.run(`
-            MATCH (u:User {id: $id})
-            SET u.name = $name,
-                u.username = $username,
-                u.email = $email,
-                u.status = $status
-        `, { id, name, username, email, status });
-
-        // 2. Si le rôle a changé, mettre à jour la relation
-        if (role) {
-            // Supprimer l'ancienne relation HAS_ROLE
-            await session.run(`
-                MATCH (u:User {id: $id})-[r:HAS_ROLE]->(:Role)
-                DELETE r
-            `, { id });
-
-            // Créer la nouvelle relation avec le bon rôle
-            await session.run(`
-                MATCH (u:User {id: $id})
-                MATCH (r:Role {name: $role})
-                CREATE (u)-[:HAS_ROLE]->(r)
-            `, { id, role });
-        }
-
-        res.json({ success: true });
-
-    } catch (e) {
-        console.error('Update moderator error:', e);
-        res.status(500).json({ success: false, message: e.message });
-    } finally {
-        await session.close();
-    }
-});
-*/
-
-// backend/server.js - Remplacer l'endpoint update moderator
-
-app.put('/api/admin/moderators/:id', async (req, res) => {
-    const { id } = req.params;
-    const { name, username, email, status, role } = req.body;
+    const { firstName, lastName, username, email, status, role } = req.body;
 
     const session = driver.session();
 
@@ -1131,11 +1164,12 @@ app.put('/api/admin/moderators/:id', async (req, res) => {
         // 1. Mettre à jour les propriétés de base
         await session.run(`
             MATCH (u:User {id: $id})
-            SET u.name = $name,
+            SET u.firstName = $firstName,
+                u.lastName = $lastName,
                 u.username = $username,
                 u.email = $email,
                 u.status = $status
-        `, { id, name, username, email, status });
+        `, { id, firstName, lastName, username, email, status });
 
         // 2. Si le rôle a changé, changer la relation vers le bon noeud Role existant
         if (role) {
@@ -1167,7 +1201,8 @@ app.put('/api/admin/moderators/:id', async (req, res) => {
             success: true,
             user: {
                 id: user.id,
-                name: user.name,
+                firstName: user.firstName,
+                lastName: user.lastName,
                 username: user.username,
                 email: user.email,
                 status: user.status,
