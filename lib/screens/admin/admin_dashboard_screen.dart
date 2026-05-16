@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:model2/core/theme/app_theme.dart';
 
 import '../../services/dashboard_service.dart';
 
@@ -79,12 +80,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     return Container(
       padding: const EdgeInsets.all(15),
       decoration: BoxDecoration(
-        color: const Color(0xFF48426D).withOpacity(0.3),
+        color: AppTheme.mediumPurple.withOpacity(0.3),
         borderRadius: BorderRadius.circular(15),
       ),
       child: Column(
         children: [
-          Icon(icon, color: const Color(0xFFF0C38E)),
+          Icon(icon, color: AppTheme.peach),
           const SizedBox(height: 10),
           Text(value,
               style: GoogleFonts.righteous(color: Colors.white, fontSize: 18)),

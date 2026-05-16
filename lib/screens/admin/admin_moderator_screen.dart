@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:model2/core/theme/app_theme.dart';
 import 'package:model2/services/api_service.dart';
 import 'package:model2/widgets/dynamic_background.dart';
 
@@ -77,7 +78,7 @@ class _AdminModeratorsScreenState extends State<AdminModeratorsScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: const Color(0xFF312C51),
+      backgroundColor: AppTheme.darkPurple,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
       ),
@@ -94,7 +95,7 @@ class _AdminModeratorsScreenState extends State<AdminModeratorsScreen> {
             Text(
               moderator == null ? "ADD_MODERATOR" : "EDIT_MODERATOR",
               style: GoogleFonts.righteous(
-                color: const Color(0xFFF0C38E),
+                color: AppTheme.peach,
                 fontSize: 20,
               ),
             ),
@@ -178,7 +179,7 @@ class _AdminModeratorsScreenState extends State<AdminModeratorsScreen> {
 
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFF0C38E),
+                backgroundColor: AppTheme.peach,
                 minimumSize: const Size(double.infinity, 50),
               ),
               onPressed: () async {
@@ -215,7 +216,7 @@ class _AdminModeratorsScreenState extends State<AdminModeratorsScreen> {
               child: Text(
                 "SAVE",
                 style: GoogleFonts.spaceMono(
-                  color: const Color(0xFF312C51),
+                  color: AppTheme.darkPurple,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -241,7 +242,7 @@ class _AdminModeratorsScreenState extends State<AdminModeratorsScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: const Color(0xFF312C51),
+      backgroundColor: AppTheme.darkPurple,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
       ),
@@ -259,7 +260,7 @@ class _AdminModeratorsScreenState extends State<AdminModeratorsScreen> {
               Text(
                 moderator == null ? "ADD_MODERATOR" : "EDIT_MODERATOR",
                 style: GoogleFonts.righteous(
-                  color: const Color(0xFFF0C38E),
+                  color: AppTheme.peach,
                   fontSize: 20,
                 ),
               ),
@@ -277,7 +278,7 @@ class _AdminModeratorsScreenState extends State<AdminModeratorsScreen> {
 
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFF0C38E),
+                  backgroundColor: AppTheme.peach,
                   minimumSize: const Size(double.infinity, 50),
                 ),
                 onPressed: () async {
@@ -335,7 +336,7 @@ class _AdminModeratorsScreenState extends State<AdminModeratorsScreen> {
                 child: Text(
                   "SAVE",
                   style: GoogleFonts.spaceMono(
-                    color: const Color(0xFF312C51),
+                    color: AppTheme.darkPurple,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -360,7 +361,7 @@ class _AdminModeratorsScreenState extends State<AdminModeratorsScreen> {
       padding: const EdgeInsets.only(bottom: 15),
       child: DropdownButtonFormField<String>(
         value: value,
-        dropdownColor: const Color(0xFF48426D),
+        dropdownColor: AppTheme.mediumPurple,
         style: GoogleFonts.spaceMono(color: Colors.white),
         decoration: InputDecoration(
           labelText: label,
@@ -401,7 +402,7 @@ class _AdminModeratorsScreenState extends State<AdminModeratorsScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: const Color(0xFF312C51),
+      backgroundColor: AppTheme.darkPurple,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
       ),
@@ -421,7 +422,7 @@ class _AdminModeratorsScreenState extends State<AdminModeratorsScreen> {
                   Text(
                     moderator == null ? "ADD_MODERATOR" : "EDIT_MODERATOR",
                     style: GoogleFonts.righteous(
-                      color: const Color(0xFFF0C38E),
+                      color: AppTheme.peach,
                       fontSize: 20,
                     ),
                   ),
@@ -468,7 +469,7 @@ class _AdminModeratorsScreenState extends State<AdminModeratorsScreen> {
 
                   ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFF0C38E),
+                      backgroundColor: AppTheme.peach,
                       minimumSize: const Size(double.infinity, 50),
                     ),
                     onPressed: () async {
@@ -513,7 +514,7 @@ class _AdminModeratorsScreenState extends State<AdminModeratorsScreen> {
                     child: Text(
                       "SAVE",
                       style: GoogleFonts.spaceMono(
-                        color: const Color(0xFF312C51),
+                        color: AppTheme.darkPurple,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -589,7 +590,7 @@ class _AdminModeratorsScreenState extends State<AdminModeratorsScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        backgroundColor: const Color(0xFF312C51),
+        backgroundColor: AppTheme.darkPurple,
         title: Text("DELETE_MODERATOR",
             style: GoogleFonts.righteous(color: Colors.redAccent)),
         actions: [
@@ -625,7 +626,7 @@ class _AdminModeratorsScreenState extends State<AdminModeratorsScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        backgroundColor: const Color(0xFF312C51),
+        backgroundColor: AppTheme.darkPurple,
         title: Text(
           "DELETE_MODERATOR",
           style: GoogleFonts.righteous(color: Colors.redAccent),
@@ -662,20 +663,20 @@ class _AdminModeratorsScreenState extends State<AdminModeratorsScreen> {
       margin: const EdgeInsets.only(bottom: 15),
       padding: const EdgeInsets.all(15),
       decoration: BoxDecoration(
-        color: const Color(0xFF48426D).withOpacity(0.3),
+        color: AppTheme.mediumPurple.withOpacity(0.3),
         borderRadius: BorderRadius.circular(15),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(mod['name'] ?? "N/A",
-              style: GoogleFonts.righteous(color: const Color(0xFFF0C38E))),
+              style: GoogleFonts.righteous(color: AppTheme.peach)),
           const SizedBox(height: 5),
           Text(mod['username'] ?? "N/A",
-              style: GoogleFonts.righteous(color: const Color(0xFFF0C38E))),
+              style: GoogleFonts.righteous(color: AppTheme.peach)),
           const SizedBox(height: 5),
           Text(mod['email'] ?? "N/A",
-              style: GoogleFonts.righteous(color: const Color(0xFFF0C38E))),
+              style: GoogleFonts.righteous(color: AppTheme.peach)),
           const SizedBox(height: 5),
           Text("PASSWORD: HIDDEN",
               style: GoogleFonts.spaceMono(color: Colors.white38)),
@@ -723,7 +724,7 @@ class _AdminModeratorsScreenState extends State<AdminModeratorsScreen> {
       margin: const EdgeInsets.only(bottom: 15),
       padding: const EdgeInsets.all(15),
       decoration: BoxDecoration(
-        color: const Color(0xFF48426D).withOpacity(0.3),
+        color: AppTheme.mediumPurple.withOpacity(0.3),
         borderRadius: BorderRadius.circular(15),
       ),
       child: Column(
@@ -737,7 +738,7 @@ class _AdminModeratorsScreenState extends State<AdminModeratorsScreen> {
                 child: Text(
                   mod['name'] ?? "N/A",
                   style: GoogleFonts.righteous(
-                    color: const Color(0xFFF0C38E),
+                    color: AppTheme.peach,
                     fontSize: 16,
                   ),
                 ),
@@ -752,7 +753,7 @@ class _AdminModeratorsScreenState extends State<AdminModeratorsScreen> {
                 ),
                 child: DropdownButton<String>(
                   value: mod['status']?.toString().toUpperCase() ?? 'ACTIVE',
-                  dropdownColor: const Color(0xFF48426D),
+                  dropdownColor: AppTheme.mediumPurple,
                   underline: const SizedBox(),
                   style: GoogleFonts.spaceMono(
                     color: statusColor,
@@ -781,7 +782,7 @@ class _AdminModeratorsScreenState extends State<AdminModeratorsScreen> {
           Text(
             "@${mod['username'] ?? 'unknown'}",
             style: GoogleFonts.spaceMono(
-              color: const Color(0xFFF1AA9B),
+              color: AppTheme.coral,
               fontSize: 11,
             ),
           ),
@@ -800,14 +801,14 @@ class _AdminModeratorsScreenState extends State<AdminModeratorsScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
             decoration: BoxDecoration(
-              color: const Color(0xFFF0C38E).withOpacity(0.2),
+              color: AppTheme.peach.withOpacity(0.2),
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: const Color(0xFFF0C38E).withOpacity(0.5)),
+              border: Border.all(color: AppTheme.peach.withOpacity(0.5)),
             ),
             child: Text(
               mod['role']?.toString().toUpperCase() ?? 'MODERATOR',
               style: GoogleFonts.spaceMono(
-                color: const Color(0xFFF0C38E),
+                color: AppTheme.peach,
                 fontSize: 9,
               ),
             ),
@@ -908,7 +909,7 @@ class _AdminModeratorsScreenState extends State<AdminModeratorsScreen> {
       return const Scaffold(
         body: DynamicBackground(
           child: Center(
-            child: CircularProgressIndicator(color: Color(0xFFF0C38E)),
+            child: CircularProgressIndicator(color: AppTheme.peach),
           ),
         ),
       );
@@ -917,9 +918,9 @@ class _AdminModeratorsScreenState extends State<AdminModeratorsScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text("Moderators")),
       floatingActionButton: FloatingActionButton(
-        backgroundColor: const Color(0xFFF0C38E),
+        backgroundColor: AppTheme.peach,
         onPressed: () => _openModeratorForm(),
-        child: const Icon(Icons.add, color: Color(0xFF312C51)),
+        child: const Icon(Icons.add, color: AppTheme.darkPurple),
       ),
       body: DynamicBackground(
         child: ListView.builder(
@@ -938,7 +939,7 @@ class _AdminModeratorsScreenState extends State<AdminModeratorsScreen> {
       return const Scaffold(
         body: DynamicBackground(
           child: Center(
-            child: CircularProgressIndicator(color: Color(0xFFF0C38E)),
+            child: CircularProgressIndicator(color: AppTheme.peach),
           ),
         ),
       );
@@ -956,9 +957,9 @@ class _AdminModeratorsScreenState extends State<AdminModeratorsScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        backgroundColor: const Color(0xFFF0C38E),
+        backgroundColor: AppTheme.peach,
         onPressed: () => _openModeratorForm(),
-        child: const Icon(Icons.add, color: Color(0xFF312C51)),
+        child: const Icon(Icons.add, color: AppTheme.darkPurple),
       ),
       body: DynamicBackground(
         child: _moderators.isEmpty

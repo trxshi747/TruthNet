@@ -2,6 +2,8 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'package:model2/core/theme/app_theme.dart';
+
 class CustomFloatingNavBar extends StatelessWidget {
   final int currentIndex;
   final Function(int) onTap;
@@ -22,7 +24,7 @@ class CustomFloatingNavBar extends StatelessWidget {
         borderRadius: BorderRadius.circular(30),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF00FFD1).withOpacity(0.15),
+            color: AppTheme.peach.withOpacity(0.15),
             blurRadius: 20,
             spreadRadius: 2,
             offset: const Offset(0, 10),
@@ -36,9 +38,9 @@ class CustomFloatingNavBar extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             decoration: BoxDecoration(
-              color: const Color(0xFF1A1A2E).withOpacity(0.6),
+              color: AppTheme.mediumPurple.withOpacity(0.6),
               borderRadius: BorderRadius.circular(30),
-              border: Border.all(color: const Color(0xFF00FFD1).withOpacity(0.3)),
+              border: Border.all(color: AppTheme.peach.withOpacity(0.3)),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -59,7 +61,7 @@ class CustomFloatingNavBar extends StatelessWidget {
                     ),
                     decoration: BoxDecoration(
                       color: isSelected
-                          ? const Color(0xFF00FFD1).withOpacity(0.15)
+                          ? AppTheme.peach.withOpacity(0.15)
                           : Colors.transparent,
                       borderRadius: BorderRadius.circular(20),
                     ),
@@ -69,7 +71,7 @@ class CustomFloatingNavBar extends StatelessWidget {
                         Icon(
                           item['icon'],
                           color: isSelected
-                              ? const Color(0xFF00FFD1)
+                              ? AppTheme.peach
                               : Colors.white54,
                           size: 24,
                         ),
@@ -78,7 +80,7 @@ class CustomFloatingNavBar extends StatelessWidget {
                           Text(
                             item['label'],
                             style: GoogleFonts.spaceMono(
-                              color: const Color(0xFF00FFD1),
+                              color: AppTheme.peach,
                               fontSize: 12,
                               fontWeight: FontWeight.bold,
                             ),

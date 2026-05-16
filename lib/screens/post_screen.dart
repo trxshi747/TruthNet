@@ -12,7 +12,9 @@ import 'package:model2/widgets/dynamic_background.dart';
 import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
-// Custom controller to highlight @tags in neon cyan
+import 'package:model2/core/theme/app_theme.dart';
+
+// Custom controller to highlight @tags in peach
 class TaggingTextEditingController extends TextEditingController {
   @override
   TextSpan buildTextSpan({required BuildContext context, TextStyle? style, required bool withComposing}) {      
@@ -25,9 +27,9 @@ class TaggingTextEditingController extends TextEditingController {
         children.add(TextSpan(
           text: match[0],
           style: style?.copyWith(
-            color: const Color(0xFF00FFD1), 
+            color: AppTheme.peach, 
             fontWeight: FontWeight.bold,
-            shadows: [Shadow(color: const Color(0xFF00FFD1).withOpacity(0.5), blurRadius: 5)],
+            shadows: [Shadow(color: AppTheme.peach.withOpacity(0.5), blurRadius: 5)],
           ),
         ));
         return "";
@@ -102,7 +104,7 @@ class _PostScreenState extends State<PostScreen> {
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
           child: Container(
-            color: const Color(0xFF1A1A2E).withOpacity(0.85),
+            color: AppTheme.mediumPurple.withOpacity(0.85),
             child: SafeArea(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -115,7 +117,7 @@ class _PostScreenState extends State<PostScreen> {
                   ),
                   Padding(
                     padding: const EdgeInsets.all(20.0),
-                    child: Text(title, style: GoogleFonts.spaceMono(color: const Color(0xFF00FFD1), fontWeight: FontWeight.bold, fontSize: 16)),
+                    child: Text(title, style: GoogleFonts.spaceMono(color: AppTheme.peach, fontWeight: FontWeight.bold, fontSize: 16)),
                   ),
                   ListTile(
                     leading: const Icon(Icons.collections_rounded, color: Colors.white),
@@ -195,8 +197,8 @@ class _PostScreenState extends State<PostScreen> {
         Navigator.pop(context, true);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('POST_BROADCAST_SUCCESSFUL', style: GoogleFonts.spaceMono(color: const Color(0xFF0D0D16), fontWeight: FontWeight.bold)),
-            backgroundColor: const Color(0xFF00FFD1),
+            content: Text('POST_BROADCAST_SUCCESSFUL', style: GoogleFonts.spaceMono(color: AppTheme.darkPurple, fontWeight: FontWeight.bold)),
+            backgroundColor: AppTheme.peach,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -212,28 +214,28 @@ class _PostScreenState extends State<PostScreen> {
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: Text('NEW_TRANSMISSION', style: GoogleFonts.righteous(fontSize: 20, color: const Color(0xFF00FFD1))),
+        title: Text('NEW_TRANSMISSION', style: GoogleFonts.righteous(fontSize: 20, color: AppTheme.peach)),
         flexibleSpace: ClipRRect(
           child: BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-            child: Container(color: const Color(0xFF0D0D16).withOpacity(0.5)),
+            child: Container(color: AppTheme.darkPurple.withOpacity(0.5)),
           ),
         ),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 16.0),
             child: _isLoading
-              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF00FFD1)))
+              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.peach))
               : Container(
                   margin: const EdgeInsets.symmetric(vertical: 8),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF00FFD1).withOpacity(0.1),
+                    color: AppTheme.peach.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: const Color(0xFF00FFD1).withOpacity(0.5))
+                    border: Border.all(color: AppTheme.peach.withOpacity(0.5))
                   ),
                   child: TextButton(
                     onPressed: _handlePost,
-                    child: Text('TRANSMIT', style: GoogleFonts.spaceMono(color: const Color(0xFF00FFD1), fontWeight: FontWeight.bold, fontSize: 14)),
+                    child: Text('TRANSMIT', style: GoogleFonts.spaceMono(color: AppTheme.peach, fontWeight: FontWeight.bold, fontSize: 14)),
                   ),
                 ),
           ),
@@ -272,12 +274,12 @@ class _PostScreenState extends State<PostScreen> {
         Container(
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            border: Border.all(color: const Color(0xFF00FFD1), width: 1.5),
-            boxShadow: [BoxShadow(color: const Color(0xFF00FFD1).withOpacity(0.3), blurRadius: 10)]
+            border: Border.all(color: AppTheme.peach, width: 1.5),
+            boxShadow: [BoxShadow(color: AppTheme.peach.withOpacity(0.3), blurRadius: 10)]
           ),
           child: CircleAvatar(
-            backgroundColor: const Color(0xFF0D0D16),
-            child: Text(auth.user?.fullName[0] ?? 'U', style: GoogleFonts.spaceMono(color: const Color(0xFF00FFD1), fontWeight: FontWeight.bold)),
+            backgroundColor: AppTheme.darkPurple,
+            child: Text(auth.user?.fullName[0] ?? 'U', style: GoogleFonts.spaceMono(color: AppTheme.peach, fontWeight: FontWeight.bold)),
           ),
         ),
         const SizedBox(width: 12),
@@ -288,7 +290,7 @@ class _PostScreenState extends State<PostScreen> {
             if (_locationString != null)
               Text(
                 "📍 ${_placeName != null ? '$_placeName ' : ''}($_locationString)", 
-                style: GoogleFonts.spaceMono(fontSize: 10, color: const Color(0xFFFFE600))
+                style: GoogleFonts.spaceMono(fontSize: 10, color: AppTheme.peach.withOpacity(0.8))
               ),
           ],
         ),
@@ -305,13 +307,13 @@ class _PostScreenState extends State<PostScreen> {
           margin: const EdgeInsets.only(bottom: 15),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(15),
-            border: Border.all(color: const Color(0xFF00FFD1).withOpacity(0.5), width: 1),
-            boxShadow: [BoxShadow(color: const Color(0xFF00FFD1).withOpacity(0.1), blurRadius: 20)]
+            border: Border.all(color: AppTheme.peach.withOpacity(0.5), width: 1),
+            boxShadow: [BoxShadow(color: AppTheme.peach.withOpacity(0.1), blurRadius: 20)]
           ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(14),
             child: _isVideo
-                ? Container(color: Colors.black, child: const Icon(Icons.play_circle_fill, size: 50, color: Color(0xFF00FFD1)))
+                ? Container(color: Colors.black, child: const Icon(Icons.play_circle_fill, size: 50, color: AppTheme.peach))
                 : (kIsWeb
                     ? Image.network(_mediaFile!.path, fit: BoxFit.cover)
                     : Image.file(File(_mediaFile!.path), fit: BoxFit.cover)),
@@ -322,7 +324,7 @@ class _PostScreenState extends State<PostScreen> {
           child: Container(
             decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.black54),
             child: IconButton(
-              icon: const Icon(Icons.cancel, color: Color(0xFFFF003C)),
+              icon: const Icon(Icons.cancel, color: AppTheme.coral),
               onPressed: () => setState(() => _mediaFile = null),
             ),
           ),
@@ -339,7 +341,7 @@ class _PostScreenState extends State<PostScreen> {
         child: Container(
           padding: const EdgeInsets.all(15),
           decoration: BoxDecoration(
-            color: const Color(0xFF1A1A2E).withOpacity(0.4),
+            color: AppTheme.mediumPurple.withOpacity(0.4),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(color: Colors.white.withOpacity(0.1)),
           ),
@@ -388,9 +390,9 @@ class _PostScreenState extends State<PostScreen> {
           child: Container(
             constraints: const BoxConstraints(maxHeight: 150),
             decoration: BoxDecoration(
-              color: const Color(0xFF1A1A2E).withOpacity(0.85),
+              color: AppTheme.mediumPurple.withOpacity(0.85),
               borderRadius: BorderRadius.circular(15),
-              border: Border.all(color: const Color(0xFF00FFD1).withOpacity(0.3)),
+              border: Border.all(color: AppTheme.peach.withOpacity(0.3)),
               boxShadow: const [BoxShadow(color: Colors.black45, blurRadius: 10)],
             ),
             child: ListView.builder(
@@ -402,11 +404,11 @@ class _PostScreenState extends State<PostScreen> {
                   dense: true,
                   leading: CircleAvatar(
                     radius: 12,
-                    backgroundColor: const Color(0xFF00FFD1),
-                    child: Text(user['name'][0].toUpperCase(), style: const TextStyle(fontSize: 10, color: Color(0xFF0D0D16))),
+                    backgroundColor: AppTheme.peach,
+                    child: Text(user['name'][0].toUpperCase(), style: const TextStyle(fontSize: 10, color: AppTheme.darkPurple)),
                   ),
                   title: Text("@${user['name']}",
-                    style: GoogleFonts.spaceMono(color: const Color(0xFF00FFD1), fontSize: 14, fontWeight: FontWeight.bold)),
+                    style: GoogleFonts.spaceMono(color: AppTheme.peach, fontSize: 14, fontWeight: FontWeight.bold)),
                   onTap: () {
                     final text = _contentController.text;
                     final atIndex = text.lastIndexOf('@');
@@ -431,10 +433,10 @@ class _PostScreenState extends State<PostScreen> {
         _buildIconButton(Icons.videocam_outlined, _handleVideoAction),
         _buildIconButton(Icons.location_on_outlined, _getLocation),
         const Spacer(),
-        Text("PUBLIC", style: GoogleFonts.spaceMono(color: _isPublic ? const Color(0xFF00FFD1) : Colors.white54, fontSize: 10)),
+        Text("PUBLIC", style: GoogleFonts.spaceMono(color: _isPublic ? AppTheme.peach : Colors.white54, fontSize: 10)),
         Switch(
           value: _isPublic,
-          activeColor: const Color(0xFF00FFD1),
+          activeColor: AppTheme.peach,
           inactiveThumbColor: Colors.white54,
           inactiveTrackColor: Colors.white10,
           onChanged: (val) => setState(() => _isPublic = val),
@@ -452,9 +454,9 @@ class _PostScreenState extends State<PostScreen> {
         border: Border.all(color: Colors.white10)
       ),
       child: IconButton(
-        icon: Icon(icon, color: const Color(0xFF00FFD1)), 
+        icon: Icon(icon, color: AppTheme.peach), 
         onPressed: onTap,
-        splashColor: const Color(0xFF00FFD1).withOpacity(0.2),
+        splashColor: AppTheme.peach.withOpacity(0.2),
       ),
     );
   }

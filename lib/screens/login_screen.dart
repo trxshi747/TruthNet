@@ -6,6 +6,8 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:model2/providers/auth_provider.dart';
 import 'package:model2/widgets/dynamic_background.dart';
 
+import 'package:model2/core/theme/app_theme.dart';
+
 class LoginScreen extends StatefulWidget {
   @override
   _LoginScreenState createState() => _LoginScreenState();
@@ -43,12 +45,12 @@ class _LoginScreenState extends State<LoginScreen> {
                       textAlign: TextAlign.center,
                       style: GoogleFonts.righteous(
                         fontSize: 64,
-                        color: const Color(0xFF00FFD1), // Neon Cyan
+                        color: AppTheme.peach, // Neon Cyan
                         letterSpacing: -2,
                         shadows: [
                           Shadow(
                             blurRadius: 25.0,
-                            color: const Color(0xFF00FFD1).withOpacity(0.8),
+                            color: AppTheme.peach.withOpacity(0.8),
                             offset: const Offset(0, 0),
                           ),
                         ],
@@ -61,11 +63,11 @@ class _LoginScreenState extends State<LoginScreen> {
                     textAlign: TextAlign.center,
                     style: GoogleFonts.spaceMono(
                       fontSize: 14,
-                      color: const Color(0xFFFF003C), // Neon Magenta
+                      color: AppTheme.coral, // Neon Magenta
                       fontWeight: FontWeight.bold,
                       letterSpacing: 1.5,
                       shadows: [
-                        Shadow(blurRadius: 10, color: const Color(0xFFFF003C).withOpacity(0.8))
+                        Shadow(blurRadius: 10, color: AppTheme.coral.withOpacity(0.8))
                       ]
                     ),
                   ).animate().fade(delay: 300.ms).slideY(begin: 0.5),
@@ -92,7 +94,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       borderRadius: BorderRadius.circular(10),
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFF00FFD1).withOpacity(0.3),
+                          color: AppTheme.peach.withOpacity(0.3),
                           blurRadius: 20,
                           spreadRadius: 2,
                         )
@@ -100,8 +102,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF00FFD1),
-                        foregroundColor: const Color(0xFF0D0D16),
+                        backgroundColor: AppTheme.peach,
+                        foregroundColor: AppTheme.darkPurple,
                         padding: const EdgeInsets.symmetric(vertical: 20),
                         elevation: 0,
                         shape: RoundedRectangleBorder(
@@ -129,7 +131,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
                                 content: Text(message, style: GoogleFonts.spaceMono()),
-                                backgroundColor: const Color(0xFFFF003C),
+                                backgroundColor: AppTheme.coral,
                               ),
                             );
                           }
@@ -154,10 +156,10 @@ class _LoginScreenState extends State<LoginScreen> {
                     child: Text(
                       'BYPASS_AUTH (GUEST_MODE)',
                       style: GoogleFonts.spaceMono(
-                        color: const Color(0xFFFFE600), // Neon Yellow
+                        color: AppTheme.peach, // Neon Yellow
                         fontWeight: FontWeight.bold,
                         fontSize: 13,
-                        shadows: [Shadow(blurRadius: 5, color: const Color(0xFFFFE600).withOpacity(0.5))]
+                        shadows: [Shadow(blurRadius: 5, color: AppTheme.peach.withOpacity(0.5))]
                       ),
                     ),
                   ).animate().fade(delay: 900.ms),
@@ -180,11 +182,11 @@ class _LoginScreenState extends State<LoginScreen> {
                           child: Text(
                             "CREATE_IDENTITY",
                             style: GoogleFonts.spaceMono(
-                              color: const Color(0xFF00FFD1),
+                              color: AppTheme.peach,
                               fontWeight: FontWeight.bold,
                               fontSize: 12,
                               decoration: TextDecoration.underline,
-                              decorationColor: const Color(0xFF00FFD1),
+                              decorationColor: AppTheme.peach,
                             ),
                           ),
                         ),
@@ -216,7 +218,7 @@ class _LoginScreenState extends State<LoginScreen> {
           decoration: BoxDecoration(
             color: Colors.white.withOpacity(0.05),
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: const Color(0xFF00FFD1).withOpacity(0.2)),
+            border: Border.all(color: AppTheme.peach.withOpacity(0.2)),
           ),
           child: TextFormField(
             controller: controller,
@@ -225,7 +227,7 @@ class _LoginScreenState extends State<LoginScreen> {
             decoration: InputDecoration(
               hintText: hint,
               hintStyle: GoogleFonts.spaceMono(color: Colors.white.withOpacity(0.3), fontSize: 12),
-              prefixIcon: Icon(icon, color: const Color(0xFF00FFD1), size: 20),
+              prefixIcon: Icon(icon, color: AppTheme.peach, size: 20),
               filled: true,
               fillColor: Colors.transparent,
               border: OutlineInputBorder(

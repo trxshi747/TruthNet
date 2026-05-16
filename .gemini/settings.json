@@ -2,7 +2,12 @@
   "skills": {
     "disabled": [
       "igniteui-react-generate-from-image-design",
-      "ui-ux-pro-max"
+      "ui-ux-pro-max",
+      "flutter-ui-design",
+      "flutter-dart-code-review",
+      "design-research",
+      "flutter-animating-apps",
+      "mobile-design"
     ]
   }
 }

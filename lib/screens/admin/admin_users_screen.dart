@@ -6,6 +6,8 @@ import 'package:provider/provider.dart';
 
 import '../../providers/auth_provider.dart';
 
+import 'package:model2/core/theme/app_theme.dart';
+
 class AdminUsersScreen extends StatefulWidget {
   const AdminUsersScreen({Key? key}) : super(key: key);
 
@@ -108,7 +110,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
     return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: const Color(0xFF312C51),
+      backgroundColor: AppTheme.darkPurple,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
       ),
@@ -129,7 +131,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                   child: Text(
                     "SUSPEND USER",
                     style: GoogleFonts.righteous(
-                      color: const Color(0xFFF0C38E),
+                      color: AppTheme.peach,
                       fontSize: 18,
                     ),
                   ),
@@ -203,12 +205,12 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                     }
                   },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFF0C38E),
+                    backgroundColor: AppTheme.peach,
                     minimumSize: const Size(double.infinity, 45),
                   ),
                   child: Text(
                     "CONFIRM SUSPENSION",
-                    style: GoogleFonts.spaceMono(color: const Color(0xFF312C51)),
+                    style: GoogleFonts.spaceMono(color: AppTheme.darkPurple),
                   ),
                 ),
                 const SizedBox(height: 20),
@@ -227,7 +229,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
     return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: const Color(0xFF312C51),
+      backgroundColor: AppTheme.darkPurple,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
       ),
@@ -321,7 +323,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF312C51),
+        backgroundColor: AppTheme.darkPurple,
         title: Text(
           "ACTIVATE USER",
           style: GoogleFonts.righteous(color: Colors.green),
@@ -468,7 +470,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
       margin: const EdgeInsets.only(bottom: 15),
       padding: const EdgeInsets.all(15),
       decoration: BoxDecoration(
-        color: const Color(0xFF48426D).withOpacity(0.3),
+        color: AppTheme.mediumPurple.withOpacity(0.3),
         borderRadius: BorderRadius.circular(15),
         border: isSanctioned ? Border.all(color: Colors.orange) : null,
       ),
@@ -485,7 +487,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                     Text(
                       user['name'] ?? 'UNKNOWN',
                       style: GoogleFonts.righteous(
-                        color: const Color(0xFFF0C38E),
+                        color: AppTheme.peach,
                         fontSize: 16,
                       ),
                     ),
@@ -559,7 +561,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        backgroundColor: const Color(0xFF312C51),
+        backgroundColor: AppTheme.darkPurple,
         title: Text(
           message,
           style: GoogleFonts.righteous(color: colors),

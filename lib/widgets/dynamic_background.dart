@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
 
+import 'package:model2/core/theme/app_theme.dart';
+
 class DynamicBackground extends StatefulWidget {
   final Widget child;
   const DynamicBackground({Key? key, required this.child}) : super(key: key);
@@ -16,9 +18,9 @@ class _DynamicBackgroundState extends State<DynamicBackground> with SingleTicker
   void initState() {
     super.initState();
     _controller = AnimationController(
-      duration: const Duration(seconds: 20),
+      duration: const Duration(seconds: 6), // Faster loop
       vsync: this,
-    )..repeat();
+    )..repeat(reverse: true); // Repeat with reverse for smoother continuous motion
   }
 
   @override
@@ -31,7 +33,7 @@ class _DynamicBackgroundState extends State<DynamicBackground> with SingleTicker
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        Container(color: const Color(0xFF0D0D16)), // Deep Cyberpunk Background
+        Container(color: AppTheme.darkPurple), // Deep Cyberpunk Background
         AnimatedBuilder(
           animation: _controller,
           builder: (context, child) {
@@ -58,18 +60,19 @@ class BackgroundPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()..maskFilter = const MaskFilter.blur(BlurStyle.normal, 100);
+    final paint = Paint()..maskFilter = const MaskFilter.blur(BlurStyle.normal, 80); // Slightly less blur for stronger color presence
     
-    // Draw moving glowing blobs using the Cyberpunk palette
-    _drawBlob(canvas, size, paint, const Color(0xFF00FFD1).withOpacity(0.15), 0.2, 0.2, 250, 1.0); // Cyan Top Left
-    _drawBlob(canvas, size, paint, const Color(0xFFFF003C).withOpacity(0.15), 0.8, 0.8, 300, 0.8); // Magenta Bottom Right
-    _drawBlob(canvas, size, paint, const Color(0xFF1A1A2E).withOpacity(0.5), 0.5, 0.5, 400, 0.5);   // Deep Surface Middle
+    // Draw moving glowing blobs using the brand palette with increased opacity and size
+    _drawBlob(canvas, size, paint, AppTheme.peach.withOpacity(0.6), 0.2, 0.3, 300, 1.2); 
+    _drawBlob(canvas, size, paint, AppTheme.coral.withOpacity(0.6), 0.8, 0.7, 350, 0.9); 
+    _drawBlob(canvas, size, paint, AppTheme.mediumPurple.withOpacity(0.9), 0.5, 0.5, 500, 0.6);   
   }
 
   void _drawBlob(Canvas canvas, Size size, Paint paint, Color color, double xFactor, double yFactor, double radius, double speed) {
     paint.color = color;
-    double x = size.width * xFactor + math.sin(animationValue * 2 * math.pi * speed) * 100;
-    double y = size.height * yFactor + math.cos(animationValue * 2 * math.pi * speed) * 100;
+    // Increased movement multipliers for wider arcs
+    double x = size.width * xFactor + math.sin(animationValue * 2 * math.pi * speed) * 250;
+    double y = size.height * yFactor + math.cos(animationValue * 2 * math.pi * speed) * 250;
     canvas.drawCircle(Offset(x, y), radius, paint);
   }
 
@@ -81,7 +84,7 @@ class GridPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = const Color(0xFF00FFD1).withOpacity(0.03) // Very subtle cyan grid
+      ..color = AppTheme.peach.withOpacity(0.03) // Very subtle cyan grid
       ..strokeWidth = 1.0
       ..style = PaintingStyle.stroke;
 

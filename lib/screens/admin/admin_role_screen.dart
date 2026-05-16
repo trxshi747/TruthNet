@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:model2/core/theme/app_theme.dart';
 import 'package:model2/services/api_service.dart';
 import 'package:model2/widgets/dynamic_background.dart';
 
@@ -62,7 +63,7 @@ class _AdminRoleScreenState extends State<AdminRoleScreen> {
       margin: const EdgeInsets.only(bottom: 15),
       padding: const EdgeInsets.all(15),
       decoration: BoxDecoration(
-        color: const Color(0xFF48426D).withOpacity(0.3),
+        color: AppTheme.mediumPurple.withOpacity(0.3),
         borderRadius: BorderRadius.circular(15),
       ),
       child: Column(
@@ -71,7 +72,7 @@ class _AdminRoleScreenState extends State<AdminRoleScreen> {
           Text(
             role['name'] ?? "",
             style: GoogleFonts.righteous(
-              color: const Color(0xFFF0C38E),
+              color: AppTheme.peach,
               fontSize: 16,
             ),
           ),
@@ -128,7 +129,7 @@ class _AdminRoleScreenState extends State<AdminRoleScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: const Color(0xFF312C51),
+      backgroundColor: AppTheme.darkPurple,
       builder: (_) => Padding(
         padding: EdgeInsets.only(
           bottom: MediaQuery.of(context).viewInsets.bottom,
@@ -142,7 +143,7 @@ class _AdminRoleScreenState extends State<AdminRoleScreen> {
             Text(
               role == null ? "ADD_ROLE" : "EDIT_ROLE",
               style: GoogleFonts.righteous(
-                color: const Color(0xFFF0C38E),
+                color: AppTheme.peach,
                 fontSize: 20,
               ),
             ),
@@ -156,7 +157,7 @@ class _AdminRoleScreenState extends State<AdminRoleScreen> {
 
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFF0C38E),
+                backgroundColor: AppTheme.peach,
                 minimumSize: const Size(double.infinity, 50),
               ),
               onPressed: () async {
@@ -188,7 +189,7 @@ class _AdminRoleScreenState extends State<AdminRoleScreen> {
               child: Text(
                 "SAVE",
                 style: GoogleFonts.spaceMono(
-                  color: const Color(0xFF312C51),
+                  color: AppTheme.darkPurple,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -207,7 +208,7 @@ class _AdminRoleScreenState extends State<AdminRoleScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: const Color(0xFF312C51),
+      backgroundColor: AppTheme.darkPurple,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
       ),
@@ -221,7 +222,7 @@ class _AdminRoleScreenState extends State<AdminRoleScreen> {
           children: [
             Text(
               role == null ? "ADD ROLE" : "EDIT ROLE",
-              style: GoogleFonts.righteous(color: const Color(0xFFF0C38E), fontSize: 20),
+              style: GoogleFonts.righteous(color: AppTheme.peach, fontSize: 20),
             ),
             const SizedBox(height: 20),
             TextField(
@@ -250,7 +251,7 @@ class _AdminRoleScreenState extends State<AdminRoleScreen> {
             const SizedBox(height: 25),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFF0C38E),
+                backgroundColor: AppTheme.peach,
                 minimumSize: const Size(double.infinity, 50),
               ),
               onPressed: () async {
@@ -286,7 +287,7 @@ class _AdminRoleScreenState extends State<AdminRoleScreen> {
               child: Text(
                 "SAVE",
                 style: GoogleFonts.spaceMono(
-                  color: const Color(0xFF312C51),
+                  color: AppTheme.darkPurple,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -346,7 +347,7 @@ class _AdminRoleScreenState extends State<AdminRoleScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        backgroundColor: const Color(0xFF312C51),
+        backgroundColor: AppTheme.darkPurple,
         title: Text(
           "DELETE ROLE",
           style: GoogleFonts.righteous(color: Colors.redAccent),
@@ -401,7 +402,7 @@ class _AdminRoleScreenState extends State<AdminRoleScreen> {
       showDialog(
         context: context,
         builder: (_) => AlertDialog(
-          backgroundColor: const Color(0xFF312C51),
+          backgroundColor: AppTheme.darkPurple,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           title: Row(
             children: [
@@ -441,7 +442,7 @@ class _AdminRoleScreenState extends State<AdminRoleScreen> {
               onPressed: () => Navigator.pop(context),
               child: Text(
                 "OK",
-                style: GoogleFonts.spaceMono(color: const Color(0xFFF0C38E)),
+                style: GoogleFonts.spaceMono(color: AppTheme.peach),
               ),
             ),
           ],
@@ -464,7 +465,7 @@ class _AdminRoleScreenState extends State<AdminRoleScreen> {
         appBar: AppBar(title: const Text("User Management")),
 
         floatingActionButton: FloatingActionButton(
-          backgroundColor: const Color(0xFFF0C38E),
+          backgroundColor: AppTheme.peach,
           onPressed: () => _openRoleForm(), // 🔥 ouvre le formulaire
           child: const Icon(Icons.add, color: Color(0xFF312C51)),
         ),

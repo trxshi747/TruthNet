@@ -6,6 +6,8 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:model2/providers/auth_provider.dart';
 import 'package:model2/widgets/dynamic_background.dart';
 
+import 'package:model2/core/theme/app_theme.dart';
+
 class SignUpScreen extends StatefulWidget {
   @override
   _SignUpScreenState createState() => _SignUpScreenState();
@@ -49,11 +51,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       textAlign: TextAlign.center,
                       style: GoogleFonts.righteous(
                         fontSize: 48,
-                        color: const Color(0xFF00FFD1), // Neon Cyan
+                        color: AppTheme.peach, // Neon Cyan
                         shadows: [
                           Shadow(
                             blurRadius: 20.0,
-                            color: const Color(0xFF00FFD1).withOpacity(0.8),
+                            color: AppTheme.peach.withOpacity(0.8),
                             offset: const Offset(0, 0),
                           ),
                         ],
@@ -66,11 +68,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     textAlign: TextAlign.center,
                     style: GoogleFonts.spaceMono(
                       fontSize: 14,
-                      color: const Color(0xFFFF003C), // Neon Magenta
+                      color: AppTheme.coral, // Neon Magenta
                       fontWeight: FontWeight.bold,
                       letterSpacing: 1.5,
                       shadows: [
-                        Shadow(blurRadius: 10, color: const Color(0xFFFF003C).withOpacity(0.8))
+                        Shadow(blurRadius: 10, color: AppTheme.coral.withOpacity(0.8))
                       ]
                     ),
                   ).animate().fade(delay: 300.ms).slideY(begin: 0.5),
@@ -122,7 +124,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       borderRadius: BorderRadius.circular(10),
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFF00FFD1).withOpacity(0.3),
+                          color: AppTheme.peach.withOpacity(0.3),
                           blurRadius: 20,
                           spreadRadius: 2,
                         )
@@ -130,8 +132,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     ),
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF00FFD1),
-                        foregroundColor: const Color(0xFF0D0D16),
+                        backgroundColor: AppTheme.peach,
+                        foregroundColor: AppTheme.darkPurple,
                         padding: const EdgeInsets.symmetric(vertical: 20),
                         elevation: 0,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -154,7 +156,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
                                 content: Text(message, style: GoogleFonts.spaceMono()),
-                                backgroundColor: const Color(0xFFFF003C),
+                                backgroundColor: AppTheme.coral,
                               ),
                             );
                           }
@@ -172,10 +174,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     child: Text(
                       'ALREADY_HAVE_IDENTITY? LOGIN',
                       style: GoogleFonts.spaceMono(
-                        color: const Color(0xFFFF003C),
+                        color: AppTheme.coral,
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
-                        shadows: [Shadow(blurRadius: 5, color: const Color(0xFFFF003C).withOpacity(0.5))]
+                        shadows: [Shadow(blurRadius: 5, color: AppTheme.coral.withOpacity(0.5))]
                       ),
                     ),
                   ).animate().fade(delay: 1000.ms),
@@ -204,7 +206,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
           decoration: BoxDecoration(
             color: Colors.white.withOpacity(0.05),
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: const Color(0xFF00FFD1).withOpacity(0.2)),
+            border: Border.all(color: AppTheme.peach.withOpacity(0.2)),
           ),
           child: TextFormField(
             controller: controller,
@@ -213,7 +215,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
             decoration: InputDecoration(
               hintText: hint,
               hintStyle: GoogleFonts.spaceMono(color: Colors.white.withOpacity(0.3), fontSize: 12),
-              prefixIcon: Icon(icon, color: const Color(0xFF00FFD1), size: 20),
+              prefixIcon: Icon(icon, color: AppTheme.peach, size: 20),
               border: InputBorder.none,
               contentPadding: const EdgeInsets.symmetric(vertical: 20, horizontal: 15),
             ),

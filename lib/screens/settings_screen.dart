@@ -6,6 +6,8 @@ import 'package:model2/services/api_service.dart';
 import 'package:model2/widgets/dynamic_background.dart';
 import 'package:model2/screens/home_screen.dart';
 
+import 'package:model2/core/theme/app_theme.dart';
+
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({Key? key}) : super(key: key);
 
@@ -22,8 +24,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF312C51),
-        title: Text(title, style: GoogleFonts.righteous(color: const Color(0xFFF0C38E))),
+        backgroundColor: AppTheme.darkPurple,
+        title: Text(title, style: GoogleFonts.righteous(color: AppTheme.peach)),
         content: TextField(
           controller: controller,
           style: GoogleFonts.spaceMono(color: Colors.white),
@@ -34,12 +36,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: Text("CANCEL", style: GoogleFonts.spaceMono(color: Colors.white54))),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFF0C38E)),
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.peach),
             onPressed: () {
               onSave(controller.text);
               Navigator.pop(context);
             },
-            child: Text("UPDATE", style: GoogleFonts.spaceMono(color: const Color(0xFF312C51))),
+            child: Text("UPDATE", style: GoogleFonts.spaceMono(color: AppTheme.darkPurple)),
           ),
         ],
       ),
@@ -51,8 +53,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF312C51),
-        title: Text("ALERT_FREQUENCY_CONFIG", style: GoogleFonts.righteous(color: const Color(0xFFF0C38E))),
+        backgroundColor: AppTheme.darkPurple,
+        title: Text("ALERT_FREQUENCY_CONFIG", style: GoogleFonts.righteous(color: AppTheme.peach)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: options.map((opt) => ListTile(
@@ -75,8 +77,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF312C51),
-        title: Text("CHANGE_ACCESS_KEY", style: GoogleFonts.righteous(color: const Color(0xFFF0C38E))),
+        backgroundColor: AppTheme.darkPurple,
+        title: Text("CHANGE_ACCESS_KEY", style: GoogleFonts.righteous(color: AppTheme.peach)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -193,8 +195,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               const SizedBox(height: 40),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFF1AA9B).withOpacity(0.2),
-                  foregroundColor: const Color(0xFFF1AA9B),
+                  backgroundColor: AppTheme.coral.withOpacity(0.2),
+                  foregroundColor: AppTheme.coral,
                   side: const BorderSide(color: Color(0xFFF1AA9B)),
                   padding: const EdgeInsets.symmetric(vertical: 15),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
@@ -216,8 +218,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     ScaffoldMessenger.of(context).removeCurrentSnackBar();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(msg, style: GoogleFonts.spaceMono(color: const Color(0xFFF0C38E), fontSize: 12)),
-        backgroundColor: const Color(0xFF48426D),
+        content: Text(msg, style: GoogleFonts.spaceMono(color: AppTheme.peach, fontSize: 12)),
+        backgroundColor: AppTheme.mediumPurple,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         duration: const Duration(seconds: 2),
@@ -228,7 +230,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _buildSectionTitle(String title) {
     return Padding(
       padding: const EdgeInsets.only(left: 10, bottom: 10, top: 10),
-      child: Text(title, style: GoogleFonts.spaceMono(color: const Color(0xFFF0C38E), fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 2)),
+      child: Text(title, style: GoogleFonts.spaceMono(color: AppTheme.peach, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 2)),
     );
   }
 
@@ -236,12 +238,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
-        color: const Color(0xFF48426D).withOpacity(0.3),
+        color: AppTheme.mediumPurple.withOpacity(0.3),
         borderRadius: BorderRadius.circular(15),
         border: Border.all(color: Colors.white.withOpacity(0.05)),
       ),
       child: ListTile(
-        leading: Icon(icon, color: const Color(0xFFF1AA9B)),
+        leading: Icon(icon, color: AppTheme.coral),
         title: Text(title, style: GoogleFonts.spaceMono(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
         subtitle: Text(subtitle, style: GoogleFonts.spaceMono(color: Colors.white54, fontSize: 11)),
         trailing: const Icon(Icons.chevron_right, color: Colors.white24),

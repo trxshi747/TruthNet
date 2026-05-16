@@ -11,6 +11,8 @@ import 'package:model2/widgets/custom_floating_nav_bar.dart';
 import 'package:model2/screens/profile_screen.dart';
 import 'package:share_plus/share_plus.dart';
 
+import 'package:model2/core/theme/app_theme.dart';
+
 // Global key to trigger profile refresh from outside
 final GlobalKey<ProfileScreenState> profileKey = GlobalKey<ProfileScreenState>();
 
@@ -25,7 +27,7 @@ class TaggingTextEditingController extends TextEditingController {
       onMatch: (Match match) {
         children.add(TextSpan(
           text: match[0],
-          style: style?.copyWith(color: const Color(0xFF00FFD1), fontWeight: FontWeight.bold),
+          style: style?.copyWith(color: AppTheme.peach, fontWeight: FontWeight.bold),
         ));
         return "";
       },
@@ -120,7 +122,7 @@ class _HomeScreenState extends State<HomeScreen> {
       onMatch: (Match match) {
         children.add(TextSpan(
           text: match[0],
-          style: GoogleFonts.spaceMono(color: const Color(0xFF00FFD1), fontWeight: FontWeight.bold, fontSize: fontSize),
+          style: GoogleFonts.spaceMono(color: AppTheme.peach, fontWeight: FontWeight.bold, fontSize: fontSize),
         ));
         return "";
       },
@@ -156,7 +158,7 @@ class _HomeScreenState extends State<HomeScreen> {
           child: BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
             child: Container(
-              color: const Color(0xFF1A1A2E).withOpacity(0.85),
+              color: AppTheme.mediumPurple.withOpacity(0.85),
               padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, left: 20, right: 20, top: 20),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -167,7 +169,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
                   ),
                   const SizedBox(height: 20),
-                  Text("COMMENTS_STREAM", style: GoogleFonts.righteous(color: const Color(0xFF00FFD1), fontSize: 18)),
+                  Text("COMMENTS_STREAM", style: GoogleFonts.righteous(color: AppTheme.peach, fontSize: 18)),
                   const SizedBox(height: 10),
                   ConstrainedBox(
                     constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.4),
@@ -193,9 +195,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                     Row(
                                       children: [
                                         Text(comment['author'] ?? "ANON", 
-                                          style: GoogleFonts.spaceMono(color: const Color(0xFFFF003C), fontWeight: FontWeight.bold, fontSize: 12)),
+                                          style: GoogleFonts.spaceMono(color: AppTheme.coral, fontWeight: FontWeight.bold, fontSize: 12)),
                                         const Spacer(),
-                                        _buildSmallAction(Icons.favorite_rounded, "${comment['likeCount'] ?? 0}", const Color(0xFFFF003C), () async {
+                                        _buildSmallAction(Icons.favorite_rounded, "${comment['likeCount'] ?? 0}", AppTheme.coral, () async {
                                           final auth = Provider.of<AuthProvider>(context, listen: false);
                                           if (auth.user != null) {
                                             await ApiService.likeComment(auth.user!.id, commentId);
@@ -230,7 +232,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                                     }
                                                  },
                                                  child: Text(isExpanded ? "HIDE_REPLIES" : "VIEW_${comment['replyCount']}_REPLIES", 
-                                                    style: GoogleFonts.spaceMono(color: const Color(0xFF00FFD1).withOpacity(0.5), fontSize: 10, decoration: TextDecoration.underline)),
+                                                    style: GoogleFonts.spaceMono(color: AppTheme.peach.withOpacity(0.5), fontSize: 10, decoration: TextDecoration.underline)),
                                                ),
                                              if (isExpanded)
                                                ...(_repliesMap[commentId] ?? []).map((reply) => Padding(
@@ -240,9 +242,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                                    children: [
                                                      Row(
                                                        children: [
-                                                         Text(reply['author'] ?? "ANON", style: GoogleFonts.spaceMono(color: const Color(0xFFFF003C), fontSize: 11, fontWeight: FontWeight.bold)),
+                                                         Text(reply['author'] ?? "ANON", style: GoogleFonts.spaceMono(color: AppTheme.coral, fontSize: 11, fontWeight: FontWeight.bold)),
                                                          const Spacer(),
-                                                         _buildSmallAction(Icons.favorite_rounded, "${reply['likeCount'] ?? 0}", const Color(0xFFFF003C), () async {
+                                                         _buildSmallAction(Icons.favorite_rounded, "${reply['likeCount'] ?? 0}", AppTheme.coral, () async {
                                                            final auth = Provider.of<AuthProvider>(context, listen: false);
                                                            if (auth.user != null) {
                                                              await ApiService.likeComment(auth.user!.id, reply['id']);
@@ -270,9 +272,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       constraints: const BoxConstraints(maxHeight: 180),
                       margin: const EdgeInsets.only(bottom: 10),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF1A1A2E).withOpacity(0.9),
+                        color: AppTheme.mediumPurple.withOpacity(0.9),
                         borderRadius: BorderRadius.circular(15),
-                        border: Border.all(color: const Color(0xFF00FFD1).withOpacity(0.3)),
+                        border: Border.all(color: AppTheme.peach.withOpacity(0.3)),
                         boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 10)],
                       ),
                       child: ListView.builder(
@@ -284,11 +286,11 @@ class _HomeScreenState extends State<HomeScreen> {
                             dense: true,
                             leading: CircleAvatar(
                               radius: 12,
-                              backgroundColor: const Color(0xFF00FFD1),
-                              child: Text(user['name'][0].toUpperCase(), style: const TextStyle(fontSize: 10, color: Color(0xFF0D0D16))),
+                              backgroundColor: AppTheme.peach,
+                              child: Text(user['name'][0].toUpperCase(), style: const TextStyle(fontSize: 10, color: AppTheme.darkPurple)),
                             ),
                             title: Text("@${user['name']}", 
-                              style: GoogleFonts.spaceMono(color: const Color(0xFF00FFD1), fontSize: 14, fontWeight: FontWeight.bold)),
+                              style: GoogleFonts.spaceMono(color: AppTheme.peach, fontSize: 14, fontWeight: FontWeight.bold)),
                             onTap: () {
                               final text = _commentController.text;
                               final atIndex = text.lastIndexOf('@');
@@ -306,12 +308,12 @@ class _HomeScreenState extends State<HomeScreen> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                       decoration: BoxDecoration(
-                         color: const Color(0xFF00FFD1).withOpacity(0.1),
+                         color: AppTheme.peach.withOpacity(0.1),
                          borderRadius: BorderRadius.circular(5)
                       ),
                       child: Row(
                         children: [
-                          Text("REPLYING_TO: @$_replyToAuthor", style: GoogleFonts.spaceMono(color: const Color(0xFFFF003C), fontSize: 10)),
+                          Text("REPLYING_TO: @$_replyToAuthor", style: GoogleFonts.spaceMono(color: AppTheme.coral, fontSize: 10)),
                           const Spacer(),
                           IconButton(
                             icon: const Icon(Icons.close, size: 14, color: Colors.white54),
@@ -354,7 +356,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         border: InputBorder.none,
                         contentPadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 15),
                         suffixIcon: IconButton(
-                          icon: const Icon(Icons.send_rounded, color: Color(0xFF00FFD1)),
+                          icon: const Icon(Icons.send_rounded, color: AppTheme.peach),
                           onPressed: () async {
                             if (_commentController.text.trim().isEmpty) return;
                             final auth = Provider.of<AuthProvider>(context, listen: false);
@@ -399,12 +401,12 @@ class _HomeScreenState extends State<HomeScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A2E).withOpacity(0.95),
+        backgroundColor: AppTheme.mediumPurple.withOpacity(0.95),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
-          side: BorderSide(color: const Color(0xFF00FFD1).withOpacity(0.5)),
+          side: BorderSide(color: AppTheme.peach.withOpacity(0.5)),
         ),
-        title: Text("EDIT_TRANSMISSION", style: GoogleFonts.righteous(color: const Color(0xFF00FFD1))),
+        title: Text("EDIT_TRANSMISSION", style: GoogleFonts.righteous(color: AppTheme.peach)),
         content: TextField(
           controller: _editController,
           maxLines: null,
@@ -413,7 +415,7 @@ class _HomeScreenState extends State<HomeScreen> {
             hintText: "UPDATE_DATA...",
             hintStyle: GoogleFonts.spaceMono(color: Colors.white24),
             enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
-            focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: const Color(0xFF00FFD1))),
+            focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppTheme.peach)),
           ),
         ),
         actions: [
@@ -423,8 +425,8 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-               backgroundColor: const Color(0xFF00FFD1),
-               foregroundColor: const Color(0xFF0D0D16),
+               backgroundColor: AppTheme.peach,
+               foregroundColor: AppTheme.darkPurple,
             ),
             onPressed: () async {
               final auth = Provider.of<AuthProvider>(context, listen: false);
@@ -449,17 +451,17 @@ class _HomeScreenState extends State<HomeScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A2E).withOpacity(0.95),
+        backgroundColor: AppTheme.mediumPurple.withOpacity(0.95),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
-          side: BorderSide(color: const Color(0xFFFF003C).withOpacity(0.5)),
+          side: BorderSide(color: AppTheme.coral.withOpacity(0.5)),
         ),
-        title: Text("DELETE_CONFIRMATION", style: GoogleFonts.righteous(color: const Color(0xFFFF003C))),
+        title: Text("DELETE_CONFIRMATION", style: GoogleFonts.righteous(color: AppTheme.coral)),
         content: Text("ERASE_THIS_TRANSMISSION_PERMANENTLY?", style: GoogleFonts.spaceMono(color: Colors.white70)),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: Text("NO", style: GoogleFonts.spaceMono(color: Colors.white))),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFF003C), foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.coral, foregroundColor: Colors.white),
             onPressed: () => Navigator.pop(context, true), 
             child: Text("YES_ERASE", style: GoogleFonts.spaceMono(fontWeight: FontWeight.bold))
           ),
@@ -503,8 +505,8 @@ class _HomeScreenState extends State<HomeScreen> {
   void _showFeedback(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(message, style: GoogleFonts.spaceMono(color: const Color(0xFF0D0D16), fontWeight: FontWeight.bold)),
-        backgroundColor: const Color(0xFF00FFD1),
+        content: Text(message, style: GoogleFonts.spaceMono(color: AppTheme.darkPurple, fontWeight: FontWeight.bold)),
+        backgroundColor: AppTheme.peach,
         duration: const Duration(milliseconds: 1500),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -527,7 +529,7 @@ class _HomeScreenState extends State<HomeScreen> {
         flexibleSpace: ClipRRect(
           child: BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-            child: Container(color: const Color(0xFF0D0D16).withOpacity(0.5)),
+            child: Container(color: AppTheme.darkPurple.withOpacity(0.5)),
           ),
         ),
         title: Hero(
@@ -535,23 +537,23 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Text(
             'TruthNet',
             style: GoogleFonts.righteous(
-              color: const Color(0xFF00FFD1),
+              color: AppTheme.peach,
               fontSize: 32,
               letterSpacing: -1,
-              shadows: [Shadow(color: const Color(0xFF00FFD1).withOpacity(0.5), blurRadius: 10)],
+              shadows: [Shadow(color: AppTheme.peach.withOpacity(0.5), blurRadius: 10)],
             ),
           ),
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh_rounded, color: Color(0xFFFFE600)), // Neon Yellow
+            icon: const Icon(Icons.refresh_rounded, color: AppTheme.peach), // Neon Yellow
             onPressed: () {
               _fetchFeed();
               if (_selectedIndex == 3) profileKey.currentState?.fetchProfile();
             },
           ),
           IconButton(
-            icon: Icon(role == UserRole.guest ? Icons.login_rounded : Icons.logout_rounded, color: const Color(0xFFFF003C)), // Magenta
+            icon: Icon(role == UserRole.guest ? Icons.login_rounded : Icons.logout_rounded, color: AppTheme.coral), // Magenta
             onPressed: () {
               authProvider.logout();
               Navigator.pushReplacementNamed(context, '/');
@@ -579,8 +581,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     if (_selectedIndex == 3) profileKey.currentState?.fetchProfile();
                   }
                 },
-                child: const Icon(Icons.add_rounded, color: Color(0xFF0D0D16)),
-                backgroundColor: const Color(0xFF00FFD1),
+                child: const Icon(Icons.add_rounded, color: AppTheme.darkPurple),
+                backgroundColor: AppTheme.peach,
                 elevation: 8,
               ).animate().scale(delay: 500.ms, duration: 400.ms, curve: Curves.easeOutBack),
             )
@@ -611,7 +613,7 @@ class _HomeScreenState extends State<HomeScreen> {
       case 0:
         return _isLoading ? _buildShimmerFeed() : _buildFeed();
       case 1:
-        return Center(child: Text('SEARCH_DATABASE...', style: GoogleFonts.spaceMono(color: const Color(0xFFFF003C))));
+        return Center(child: Text('SEARCH_DATABASE...', style: GoogleFonts.spaceMono(color: AppTheme.coral)));
       case 3:
         return ProfileScreen(key: profileKey);
       default:
@@ -628,7 +630,7 @@ class _HomeScreenState extends State<HomeScreen> {
           margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: const Color(0xFF1A1A2E).withOpacity(0.5),
+            color: AppTheme.mediumPurple.withOpacity(0.5),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(color: Colors.white.withOpacity(0.05)),
           ),
@@ -703,9 +705,9 @@ class _HomeScreenState extends State<HomeScreen> {
               margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: const Color(0xFF1A1A2E).withOpacity(0.6),
+                color: AppTheme.mediumPurple.withOpacity(0.6),
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: const Color(0xFF00FFD1).withOpacity(0.1)),
+                border: Border.all(color: AppTheme.peach.withOpacity(0.1)),
                 boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10)],
               ),
               child: Column(
@@ -716,11 +718,11 @@ class _HomeScreenState extends State<HomeScreen> {
                       Container(
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          border: Border.all(color: const Color(0xFF00FFD1), width: 1.5),
+                          border: Border.all(color: AppTheme.peach, width: 1.5),
                         ),
                         child: CircleAvatar(
-                          backgroundColor: const Color(0xFF0D0D16),
-                          child: Text(author[0].toUpperCase(), style: GoogleFonts.spaceMono(color: const Color(0xFF00FFD1), fontWeight: FontWeight.bold)),
+                          backgroundColor: AppTheme.darkPurple,
+                          child: Text(author[0].toUpperCase(), style: GoogleFonts.spaceMono(color: AppTheme.peach, fontWeight: FontWeight.bold)),
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -730,14 +732,14 @@ class _HomeScreenState extends State<HomeScreen> {
                           children: [
                             Text(author, style: GoogleFonts.spaceMono(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 14)),
                             if (location != null)
-                              Text("📍 $location", style: GoogleFonts.spaceMono(color: const Color(0xFFFFE600).withOpacity(0.8), fontSize: 9)),
+                              Text("📍 $location", style: GoogleFonts.spaceMono(color: AppTheme.peach.withOpacity(0.8), fontSize: 9)),
                           ],
                         ),
                       ),
                       if (isOwner)
                         PopupMenuButton<String>(
                           icon: const Icon(Icons.more_horiz_rounded, color: Colors.white30),
-                          color: const Color(0xFF1A1A2E),
+                          color: AppTheme.mediumPurple,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10), side: BorderSide(color: Colors.white10)),
                           onSelected: (value) {
                             if (value == 'edit') _showEditDialog(postId, content);
@@ -750,7 +752,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                             PopupMenuItem(
                               value: 'delete',
-                              child: Text("ERASE_NODE", style: GoogleFonts.spaceMono(color: const Color(0xFFFF003C))),
+                              child: Text("ERASE_NODE", style: GoogleFonts.spaceMono(color: AppTheme.coral)),
                             ),
                           ],
                         )
@@ -771,7 +773,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       width: double.infinity,
                       margin: const EdgeInsets.only(bottom: 10),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF0D0D16).withOpacity(0.5),
+                        color: AppTheme.darkPurple.withOpacity(0.5),
                         borderRadius: BorderRadius.circular(15),
                         border: Border.all(color: Colors.white.withOpacity(0.05)),
                       ),
@@ -792,15 +794,15 @@ class _HomeScreenState extends State<HomeScreen> {
                       _buildActionButton(
                         Icons.favorite_rounded, 
                         '$likeCount', 
-                        isLiked ? const Color(0xFFFF003C) : Colors.white30, 
+                        isLiked ? AppTheme.coral : Colors.white30, 
                         () => _handleLike(postId)
                       ),
-                      _buildActionButton(Icons.comment_rounded, '$commentCount', const Color(0xFF00FFD1), () => _showCommentSheet(postId)),
+                      _buildActionButton(Icons.comment_rounded, '$commentCount', AppTheme.peach, () => _showCommentSheet(postId)),
                       _buildActionButton(Icons.share_rounded, '$shareCount', Colors.white30, () => _handleShare(postId, content, author)),
                       _buildActionButton(
                         isSaved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded, 
                         '', 
-                        isSaved ? const Color(0xFFFFE600) : Colors.white30, 
+                        isSaved ? AppTheme.peach : Colors.white30, 
                         () => _handleSave(postId)
                       ),
                     ],
