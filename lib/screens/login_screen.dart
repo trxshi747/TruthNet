@@ -1,6 +1,8 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:model2/providers/auth_provider.dart';
 import 'package:model2/widgets/dynamic_background.dart';
 
@@ -41,13 +43,13 @@ class _LoginScreenState extends State<LoginScreen> {
                       textAlign: TextAlign.center,
                       style: GoogleFonts.righteous(
                         fontSize: 64,
-                        color: const Color(0xFFF0C38E),
+                        color: const Color(0xFF00FFD1), // Neon Cyan
                         letterSpacing: -2,
                         shadows: [
                           Shadow(
-                            blurRadius: 20.0,
-                            color: const Color(0xFF48426D).withOpacity(0.8),
-                            offset: const Offset(0, 10),
+                            blurRadius: 25.0,
+                            color: const Color(0xFF00FFD1).withOpacity(0.8),
+                            offset: const Offset(0, 0),
                           ),
                         ],
                       ),
@@ -59,11 +61,14 @@ class _LoginScreenState extends State<LoginScreen> {
                     textAlign: TextAlign.center,
                     style: GoogleFonts.spaceMono(
                       fontSize: 14,
-                      color: const Color(0xFFF1AA9B),
+                      color: const Color(0xFFFF003C), // Neon Magenta
                       fontWeight: FontWeight.bold,
                       letterSpacing: 1.5,
+                      shadows: [
+                        Shadow(blurRadius: 10, color: const Color(0xFFFF003C).withOpacity(0.8))
+                      ]
                     ),
-                  ),
+                  ).animate().fade(delay: 300.ms).slideY(begin: 0.5),
                   const SizedBox(height: 80),
                   _buildTextField(
                     controller: _emailController,
@@ -71,7 +76,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     icon: Icons.alternate_email_rounded,
                     validator: (value) =>
                         value != null && value.contains('@') ? null : 'INVALID_EMAIL',
-                  ),
+                  ).animate().fade(delay: 500.ms).slideX(begin: -0.2),
                   const SizedBox(height: 20),
                   _buildTextField(
                     controller: _passwordController,
@@ -80,52 +85,66 @@ class _LoginScreenState extends State<LoginScreen> {
                     isPassword: true,
                     validator: (value) =>
                         value != null && value.length >= 6 ? null : 'KEY_TOO_SHORT',
-                  ),
+                  ).animate().fade(delay: 600.ms).slideX(begin: 0.2),
                   const SizedBox(height: 40),
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFF0C38E),
-                      foregroundColor: const Color(0xFF312C51),
-                      padding: const EdgeInsets.symmetric(vertical: 20),
-                      elevation: 10,
-                      shadowColor: const Color(0xFFF0C38E).withOpacity(0.4),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
+                  Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(10),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF00FFD1).withOpacity(0.3),
+                          blurRadius: 20,
+                          spreadRadius: 2,
+                        )
+                      ],
                     ),
-                    onPressed: () async {
-                      if (_formKey.currentState!.validate()) {
-                        final response = await Provider.of<AuthProvider>(context, listen: false).login(
-                          _emailController.text,
-                          _passwordController.text,
-                        );
-
-                        if (response['success'] == true) {
-                          final role = Provider.of<AuthProvider>(context, listen: false).role;
-                          if (role == UserRole.admin) {
-                            Navigator.pushReplacementNamed(context, '/admin');
-                          } else if (role == UserRole.moderator) {
-                            Navigator.pushReplacementNamed(context, '/mod');
-                          } else {
-                            Navigator.pushReplacementNamed(context, '/home');
-                          }
-                        } else {
-                          final message = response['message'] ?? 'LOGIN_FAILED: UNKNOWN_ERROR';
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text(message)),
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF00FFD1),
+                        foregroundColor: const Color(0xFF0D0D16),
+                        padding: const EdgeInsets.symmetric(vertical: 20),
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      onPressed: () async {
+                        if (_formKey.currentState!.validate()) {
+                          final response = await Provider.of<AuthProvider>(context, listen: false).login(
+                            _emailController.text,
+                            _passwordController.text,
                           );
+
+                          if (response['success'] == true) {
+                            final role = Provider.of<AuthProvider>(context, listen: false).role;
+                            if (role == UserRole.admin) {
+                              Navigator.pushReplacementNamed(context, '/admin');
+                            } else if (role == UserRole.moderator) {
+                              Navigator.pushReplacementNamed(context, '/mod');
+                            } else {
+                              Navigator.pushReplacementNamed(context, '/home');
+                            }
+                          } else {
+                            final message = response['message'] ?? 'LOGIN_FAILED: UNKNOWN_ERROR';
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(message, style: GoogleFonts.spaceMono()),
+                                backgroundColor: const Color(0xFFFF003C),
+                              ),
+                            );
+                          }
                         }
-                      }
-                    },
-                    child: Text(
-                      'INITIALIZE_SESSION',
-                      style: GoogleFonts.spaceMono(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 2,
+                      },
+                      child: Text(
+                        'INITIALIZE_SESSION',
+                        style: GoogleFonts.spaceMono(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 2,
+                        ),
                       ),
                     ),
-                  ),
+                  ).animate().fade(delay: 800.ms).scale(begin: const Offset(0.9, 0.9)),
                   const SizedBox(height: 20),
                   TextButton(
                     onPressed: () {
@@ -135,12 +154,13 @@ class _LoginScreenState extends State<LoginScreen> {
                     child: Text(
                       'BYPASS_AUTH (GUEST_MODE)',
                       style: GoogleFonts.spaceMono(
-                        color: const Color(0xFFF1AA9B),
+                        color: const Color(0xFFFFE600), // Neon Yellow
                         fontWeight: FontWeight.bold,
                         fontSize: 13,
+                        shadows: [Shadow(blurRadius: 5, color: const Color(0xFFFFE600).withOpacity(0.5))]
                       ),
                     ),
-                  ),
+                  ).animate().fade(delay: 900.ms),
                   const SizedBox(height: 40),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -160,16 +180,17 @@ class _LoginScreenState extends State<LoginScreen> {
                           child: Text(
                             "CREATE_IDENTITY",
                             style: GoogleFonts.spaceMono(
-                              color: const Color(0xFFF0C38E),
+                              color: const Color(0xFF00FFD1),
                               fontWeight: FontWeight.bold,
                               fontSize: 12,
                               decoration: TextDecoration.underline,
+                              decorationColor: const Color(0xFF00FFD1),
                             ),
                           ),
                         ),
                       ),
                     ],
-                  ),
+                  ).animate().fade(delay: 1000.ms),
                   const SizedBox(height: 60),
                 ],
               ),
@@ -187,32 +208,38 @@ class _LoginScreenState extends State<LoginScreen> {
     bool isPassword = false,
     String? Function(String?)? validator,
   }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF48426D).withOpacity(0.5),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.white.withOpacity(0.1)),
-      ),
-      child: TextFormField(
-        controller: controller,
-        obscureText: isPassword,
-        style: GoogleFonts.spaceMono(color: Colors.white, fontSize: 14),
-        decoration: InputDecoration(
-          hintText: hint,
-          hintStyle: GoogleFonts.spaceMono(color: Colors.white.withOpacity(0.3), fontSize: 12),
-          prefixIcon: Icon(icon, color: const Color(0xFFF0C38E), size: 20),
-          filled: true,
-          fillColor: Colors.transparent,
-          border: OutlineInputBorder(
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.05),
             borderRadius: BorderRadius.circular(10),
-            borderSide: BorderSide.none,
+            border: Border.all(color: const Color(0xFF00FFD1).withOpacity(0.2)),
           ),
-          contentPadding: const EdgeInsets.symmetric(vertical: 20),
+          child: TextFormField(
+            controller: controller,
+            obscureText: isPassword,
+            style: GoogleFonts.spaceMono(color: Colors.white, fontSize: 14),
+            decoration: InputDecoration(
+              hintText: hint,
+              hintStyle: GoogleFonts.spaceMono(color: Colors.white.withOpacity(0.3), fontSize: 12),
+              prefixIcon: Icon(icon, color: const Color(0xFF00FFD1), size: 20),
+              filled: true,
+              fillColor: Colors.transparent,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide.none,
+              ),
+              contentPadding: const EdgeInsets.symmetric(vertical: 20),
+            ),
+            validator: (val) {
+              final result = validator?.call(val);
+              return result;
+            },
+          ),
         ),
-        validator: (val) {
-          final result = validator?.call(val);
-          return result;
-        },
       ),
     );
   }

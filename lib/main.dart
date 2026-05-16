@@ -25,19 +25,20 @@ class MyApp extends StatelessWidget {
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
           useMaterial3: true,
-          scaffoldBackgroundColor: const Color(0xFF312C51),
+          scaffoldBackgroundColor: const Color(0xFF0D0D16), // Deep Cyberpunk Background
           colorScheme: ColorScheme.fromSeed(
-            seedColor: const Color(0xFF48426D),
-            primary: const Color(0xFF48426D),
-            secondary: const Color(0xFFF0C38E),
-            tertiary: const Color(0xFFF1AA9B),
-            surface: const Color(0xFF312C51),
+            seedColor: const Color(0xFF00FFD1), // Neon Cyan
+            primary: const Color(0xFF00FFD1),
+            secondary: const Color(0xFFFF003C), // Neon Magenta
+            tertiary: const Color(0xFFFFE600), // Neon Yellow/Gold
+            surface: const Color(0xFF1A1A2E), // Slightly lighter surface
             onSurface: Colors.white,
+            brightness: Brightness.dark,
           ),
           textSelectionTheme: const TextSelectionThemeData(
-            cursorColor: Color(0xFFF0C38E),
-            selectionColor: Color(0x66F0C38E),
-            selectionHandleColor: Color(0xFFF0C38E),
+            cursorColor: Color(0xFF00FFD1),
+            selectionColor: Color(0x6600FFD1),
+            selectionHandleColor: Color(0xFF00FFD1),
           ),
           appBarTheme: const AppBarTheme(
             backgroundColor: Colors.transparent,
@@ -47,18 +48,17 @@ class MyApp extends StatelessWidget {
           textTheme: GoogleFonts.spaceMonoTextTheme(
             ThemeData.dark().textTheme,
           ).copyWith(
-            displayLarge: GoogleFonts.righteous(color: const Color(0xFFF0C38E)),
-            displayMedium: GoogleFonts.righteous(color: const Color(0xFFF0C38E)),
-            displaySmall: GoogleFonts.righteous(color: const Color(0xFFF0C38E)),
-            headlineLarge: GoogleFonts.righteous(color: const Color(0xFFF0C38E)),
-            headlineMedium: GoogleFonts.righteous(color: const Color(0xFFF0C38E)),
-            headlineSmall: GoogleFonts.righteous(color: const Color(0xFFF0C38E)),
-            titleLarge: GoogleFonts.righteous(color: const Color(0xFFF0C38E), fontWeight: FontWeight.bold),
+            displayLarge: GoogleFonts.righteous(color: const Color(0xFF00FFD1)),
+            displayMedium: GoogleFonts.righteous(color: const Color(0xFF00FFD1)),
+            displaySmall: GoogleFonts.righteous(color: const Color(0xFF00FFD1)),
+            headlineLarge: GoogleFonts.righteous(color: const Color(0xFF00FFD1)),
+            headlineMedium: GoogleFonts.righteous(color: const Color(0xFF00FFD1)),
+            headlineSmall: GoogleFonts.righteous(color: const Color(0xFF00FFD1)),
+            titleLarge: GoogleFonts.righteous(color: const Color(0xFF00FFD1), fontWeight: FontWeight.bold),
             bodyLarge: GoogleFonts.spaceMono(color: Colors.white),
             bodyMedium: GoogleFonts.spaceMono(color: Colors.white70),
           ),
-        ),
-        initialRoute: '/',
+        ),        initialRoute: '/',
         routes: {
           '/': (context) => LoginScreen(),
           '/signup': (context) => SignUpScreen(),

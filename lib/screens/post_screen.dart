@@ -1,19 +1,21 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:model2/providers/auth_provider.dart';
 import 'package:model2/services/api_service.dart';
 import 'package:model2/widgets/dynamic_background.dart';
 import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
-// Custom controller to highlight @tags in orange (same as HomeScreen)
+// Custom controller to highlight @tags in neon cyan
 class TaggingTextEditingController extends TextEditingController {
   @override
-  TextSpan buildTextSpan({required BuildContext context, TextStyle? style, required bool withComposing}) {
+  TextSpan buildTextSpan({required BuildContext context, TextStyle? style, required bool withComposing}) {      
     final List<TextSpan> children = [];
     final RegExp tagRegExp = RegExp(r"(@\w+)");
 
@@ -22,7 +24,11 @@ class TaggingTextEditingController extends TextEditingController {
       onMatch: (Match match) {
         children.add(TextSpan(
           text: match[0],
-          style: style?.copyWith(color: const Color(0xFFF0C38E), fontWeight: FontWeight.bold),
+          style: style?.copyWith(
+            color: const Color(0xFF00FFD1), 
+            fontWeight: FontWeight.bold,
+            shadows: [Shadow(color: const Color(0xFF00FFD1).withOpacity(0.5), blurRadius: 5)],
+          ),
         ));
         return "";
       },
@@ -44,7 +50,7 @@ class PostScreen extends StatefulWidget {
 class _PostScreenState extends State<PostScreen> {
   final TaggingTextEditingController _contentController = TaggingTextEditingController();
   final ImagePicker _picker = ImagePicker();
-  
+
   bool _isPublic = true;
   bool _isLoading = false;
   XFile? _mediaFile;
@@ -87,31 +93,45 @@ class _PostScreenState extends State<PostScreen> {
     );
   }
 
-  void _showPickerOptions({required String title, required Function onGallery, required Function onCamera}) {
+  void _showPickerOptions({required String title, required Function onGallery, required Function onCamera}) {   
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF312C51),
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Text(title, style: GoogleFonts.spaceMono(color: const Color(0xFFF1AA9B), fontWeight: FontWeight.bold)),
+      backgroundColor: Colors.transparent,
+      builder: (context) => ClipRRect(
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+          child: Container(
+            color: const Color(0xFF1A1A2E).withOpacity(0.85),
+            child: SafeArea(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    margin: const EdgeInsets.only(top: 15),
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(20.0),
+                    child: Text(title, style: GoogleFonts.spaceMono(color: const Color(0xFF00FFD1), fontWeight: FontWeight.bold, fontSize: 16)),
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.collections_rounded, color: Colors.white),
+                    title: Text('FROM_GALLERY', style: GoogleFonts.spaceMono(color: Colors.white)),
+                    onTap: () { Navigator.pop(context); onGallery(); },
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.camera_alt_rounded, color: Colors.white),
+                    title: Text('USE_CAMERA', style: GoogleFonts.spaceMono(color: Colors.white)),
+                    onTap: () { Navigator.pop(context); onCamera(); },
+                  ),
+                  const SizedBox(height: 20),
+                ],
+              ),
             ),
-            ListTile(
-              leading: const Icon(Icons.collections_rounded, color: Colors.white),
-              title: Text('FROM_GALLERY', style: GoogleFonts.spaceMono(color: Colors.white)),
-              onTap: () { Navigator.pop(context); onGallery(); },
-            ),
-            ListTile(
-              leading: const Icon(Icons.camera_alt_rounded, color: Colors.white),
-              title: Text('USE_CAMERA', style: GoogleFonts.spaceMono(color: Colors.white)),
-              onTap: () { Navigator.pop(context); onCamera(); },
-            ),
-            const SizedBox(height: 10),
-          ],
+          ),
         ),
       ),
     );
@@ -127,9 +147,9 @@ class _PostScreenState extends State<PostScreen> {
 
       if (permission == LocationPermission.always || permission == LocationPermission.whileInUse) {
         Position position = await Geolocator.getCurrentPosition();
-        
+
         try {
-          List<Placemark> placemarks = await placemarkFromCoordinates(position.latitude, position.longitude);
+          List<Placemark> placemarks = await placemarkFromCoordinates(position.latitude, position.longitude);   
           if (placemarks.isNotEmpty) {
             Placemark place = placemarks[0];
             setState(() {
@@ -153,13 +173,13 @@ class _PostScreenState extends State<PostScreen> {
   Future<void> _handlePost() async {
     if (_contentController.text.trim().isEmpty && _mediaFile == null) return;
     setState(() => _isLoading = true);
-    
+
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final userId = authProvider.user?.id;
 
     if (userId != null) {
-      final String locData = _placeName != null 
-          ? "$_placeName ($_locationString)" 
+      final String locData = _placeName != null
+          ? "$_placeName ($_locationString)"
           : (_locationString ?? "");
 
       final result = await ApiService.createPost(
@@ -170,13 +190,14 @@ class _PostScreenState extends State<PostScreen> {
         isVideo: _isVideo,
         location: locData,
       );
-      
+
       if (result['id'] != null) {
         Navigator.pop(context, true);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('POST_BROADCAST_SUCCESSFUL', style: GoogleFonts.spaceMono()),
-            backgroundColor: const Color(0xFFF0C38E),
+            content: Text('POST_BROADCAST_SUCCESSFUL', style: GoogleFonts.spaceMono(color: const Color(0xFF0D0D16), fontWeight: FontWeight.bold)),
+            backgroundColor: const Color(0xFF00FFD1),
+            behavior: SnackBarBehavior.floating,
           ),
         );
       }
@@ -187,19 +208,33 @@ class _PostScreenState extends State<PostScreen> {
   @override
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
-    
+
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: Text('NEW_POST', style: GoogleFonts.righteous(fontSize: 20)),
+        title: Text('NEW_TRANSMISSION', style: GoogleFonts.righteous(fontSize: 20, color: const Color(0xFF00FFD1))),
+        flexibleSpace: ClipRRect(
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+            child: Container(color: const Color(0xFF0D0D16).withOpacity(0.5)),
+          ),
+        ),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 16.0),
-            child: _isLoading 
-              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFF0C38E)))
-              : TextButton(
-                  onPressed: _handlePost,
-                  child: Text('POST', style: GoogleFonts.righteous(color: const Color(0xFFF0C38E), fontSize: 18)),
+            child: _isLoading
+              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF00FFD1)))
+              : Container(
+                  margin: const EdgeInsets.symmetric(vertical: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF00FFD1).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFF00FFD1).withOpacity(0.5))
+                  ),
+                  child: TextButton(
+                    onPressed: _handlePost,
+                    child: Text('TRANSMIT', style: GoogleFonts.spaceMono(color: const Color(0xFF00FFD1), fontWeight: FontWeight.bold, fontSize: 14)),
+                  ),
                 ),
           ),
         ],
@@ -210,19 +245,19 @@ class _PostScreenState extends State<PostScreen> {
             padding: const EdgeInsets.all(20.0),
             child: Column(
               children: [
-                _buildHeader(authProvider),
+                _buildHeader(authProvider).animate().fade(delay: 100.ms).slideY(begin: 0.2),
                 const SizedBox(height: 20),
-                if (_mediaFile != null) _buildMediaPreview(),
+                if (_mediaFile != null) _buildMediaPreview().animate().fade().scale(begin: const Offset(0.9, 0.9)),
                 Expanded(
                   child: Stack(
                     children: [
-                      _buildEditor(),
+                      _buildEditor().animate().fade(delay: 200.ms).slideY(begin: 0.2),
                       if (_userSearchResults.isNotEmpty) _buildTaggingOverlay(),
                     ],
                   ),
                 ),
                 const Divider(height: 40, color: Colors.white10),
-                _buildActionToolbar(),
+                _buildActionToolbar().animate().fade(delay: 300.ms).slideY(begin: 0.2),
               ],
             ),
           ),
@@ -234,19 +269,26 @@ class _PostScreenState extends State<PostScreen> {
   Widget _buildHeader(AuthProvider auth) {
     return Row(
       children: [
-        CircleAvatar(
-          backgroundColor: const Color(0xFFF1AA9B),
-          child: Text(auth.user?.fullName[0] ?? 'U', style: const TextStyle(color: Color(0xFF312C51))),
+        Container(
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: const Color(0xFF00FFD1), width: 1.5),
+            boxShadow: [BoxShadow(color: const Color(0xFF00FFD1).withOpacity(0.3), blurRadius: 10)]
+          ),
+          child: CircleAvatar(
+            backgroundColor: const Color(0xFF0D0D16),
+            child: Text(auth.user?.fullName[0] ?? 'U', style: GoogleFonts.spaceMono(color: const Color(0xFF00FFD1), fontWeight: FontWeight.bold)),
+          ),
         ),
         const SizedBox(width: 12),
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(auth.user?.fullName ?? 'USER', style: GoogleFonts.spaceMono(fontWeight: FontWeight.bold)),
+            Text(auth.user?.fullName ?? 'USER', style: GoogleFonts.spaceMono(fontWeight: FontWeight.bold, color: Colors.white)),     
             if (_locationString != null)
               Text(
                 "📍 ${_placeName != null ? '$_placeName ' : ''}($_locationString)", 
-                style: GoogleFonts.spaceMono(fontSize: 10, color: const Color(0xFFF1AA9B))
+                style: GoogleFonts.spaceMono(fontSize: 10, color: const Color(0xFFFFE600))
               ),
           ],
         ),
@@ -263,22 +305,26 @@ class _PostScreenState extends State<PostScreen> {
           margin: const EdgeInsets.only(bottom: 15),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(15),
-            border: Border.all(color: const Color(0xFFF0C38E), width: 1),
+            border: Border.all(color: const Color(0xFF00FFD1).withOpacity(0.5), width: 1),
+            boxShadow: [BoxShadow(color: const Color(0xFF00FFD1).withOpacity(0.1), blurRadius: 20)]
           ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(14),
-            child: _isVideo 
-                ? Container(color: Colors.black, child: const Icon(Icons.play_circle_fill, size: 50, color: Colors.white54))
-                : (kIsWeb 
-                    ? Image.network(_mediaFile!.path, fit: BoxFit.cover) 
+            child: _isVideo
+                ? Container(color: Colors.black, child: const Icon(Icons.play_circle_fill, size: 50, color: Color(0xFF00FFD1)))
+                : (kIsWeb
+                    ? Image.network(_mediaFile!.path, fit: BoxFit.cover)
                     : Image.file(File(_mediaFile!.path), fit: BoxFit.cover)),
           ),
         ),
         Positioned(
           top: 5, right: 5,
-          child: IconButton(
-            icon: const Icon(Icons.cancel, color: Colors.redAccent),
-            onPressed: () => setState(() => _mediaFile = null),
+          child: Container(
+            decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.black54),
+            child: IconButton(
+              icon: const Icon(Icons.cancel, color: Color(0xFFFF003C)),
+              onPressed: () => setState(() => _mediaFile = null),
+            ),
           ),
         )
       ],
@@ -286,39 +332,45 @@ class _PostScreenState extends State<PostScreen> {
   }
 
   Widget _buildEditor() {
-    return Container(
-      padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(
-        color: const Color(0xFF48426D).withOpacity(0.3),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withOpacity(0.05)),
-      ),
-      child: TextField(
-        controller: _contentController,
-        onChanged: (text) async {
-          final int atIndex = text.lastIndexOf('@');
-          if (atIndex != -1) {
-            final String query = text.substring(atIndex + 1);
-            if (!query.contains(' ')) {
-              final results = await ApiService.searchUsers(query);
-              setState(() {
-                _userSearchResults = results;
-              });
-              return;
-            }
-          }
-          if (_userSearchResults.isNotEmpty) {
-            setState(() {
-              _userSearchResults = [];
-            });
-          }
-        },
-        maxLines: null,
-        style: GoogleFonts.spaceMono(color: Colors.white),
-        decoration: InputDecoration(
-          hintText: "INPUT_DATA_HERE...",
-          hintStyle: GoogleFonts.spaceMono(color: Colors.white24),
-          border: InputBorder.none,
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          padding: const EdgeInsets.all(15),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A1A2E).withOpacity(0.4),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.white.withOpacity(0.1)),
+          ),
+          child: TextField(
+            controller: _contentController,
+            onChanged: (text) async {
+              final int atIndex = text.lastIndexOf('@');
+              if (atIndex != -1) {
+                final String query = text.substring(atIndex + 1);
+                if (!query.contains(' ')) {
+                  final results = await ApiService.searchUsers(query);
+                  setState(() {
+                    _userSearchResults = results;
+                  });
+                  return;
+                }
+              }
+              if (_userSearchResults.isNotEmpty) {
+                setState(() {
+                  _userSearchResults = [];
+                });
+              }
+            },
+            maxLines: null,
+            style: GoogleFonts.spaceMono(color: Colors.white),
+            decoration: InputDecoration(
+              hintText: "INPUT_DATA_HERE...",
+              hintStyle: GoogleFonts.spaceMono(color: Colors.white24),
+              border: InputBorder.none,
+            ),
+          ),
         ),
       ),
     );
@@ -329,38 +381,44 @@ class _PostScreenState extends State<PostScreen> {
       bottom: 0,
       left: 0,
       right: 0,
-      child: Container(
-        constraints: const BoxConstraints(maxHeight: 150),
-        decoration: BoxDecoration(
-          color: const Color(0xFF48426D).withOpacity(0.95),
-          borderRadius: BorderRadius.circular(15),
-          border: Border.all(color: const Color(0xFFF0C38E).withOpacity(0.3)),
-          boxShadow: [BoxShadow(color: Colors.black45, blurRadius: 10)],
-        ),
-        child: ListView.builder(
-          shrinkWrap: true,
-          itemCount: _userSearchResults.length,
-          itemBuilder: (context, index) {
-            final user = _userSearchResults[index];
-            return ListTile(
-              dense: true,
-              leading: CircleAvatar(
-                radius: 12,
-                backgroundColor: const Color(0xFFF0C38E),
-                child: Text(user['name'][0].toUpperCase(), style: const TextStyle(fontSize: 10, color: Color(0xFF312C51))),
-              ),
-              title: Text("@${user['name']}", 
-                style: GoogleFonts.spaceMono(color: const Color(0xFFF0C38E), fontSize: 14, fontWeight: FontWeight.bold)),
-              onTap: () {
-                final text = _contentController.text;
-                final atIndex = text.lastIndexOf('@');
-                final newText = text.substring(0, atIndex) + "@${user['name']} ";
-                _contentController.text = newText;
-                _contentController.selection = TextSelection.fromPosition(TextPosition(offset: newText.length));
-                setState(() => _userSearchResults = []);
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(15),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+          child: Container(
+            constraints: const BoxConstraints(maxHeight: 150),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1A1A2E).withOpacity(0.85),
+              borderRadius: BorderRadius.circular(15),
+              border: Border.all(color: const Color(0xFF00FFD1).withOpacity(0.3)),
+              boxShadow: const [BoxShadow(color: Colors.black45, blurRadius: 10)],
+            ),
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: _userSearchResults.length,
+              itemBuilder: (context, index) {
+                final user = _userSearchResults[index];
+                return ListTile(
+                  dense: true,
+                  leading: CircleAvatar(
+                    radius: 12,
+                    backgroundColor: const Color(0xFF00FFD1),
+                    child: Text(user['name'][0].toUpperCase(), style: const TextStyle(fontSize: 10, color: Color(0xFF0D0D16))),
+                  ),
+                  title: Text("@${user['name']}",
+                    style: GoogleFonts.spaceMono(color: const Color(0xFF00FFD1), fontSize: 14, fontWeight: FontWeight.bold)),
+                  onTap: () {
+                    final text = _contentController.text;
+                    final atIndex = text.lastIndexOf('@');
+                    final newText = text.substring(0, atIndex) + "@${user['name']} ";
+                    _contentController.text = newText;
+                    _contentController.selection = TextSelection.fromPosition(TextPosition(offset: newText.length));
+                    setState(() => _userSearchResults = []);
+                  },
+                );
               },
-            );
-          },
+            ),
+          ),
         ),
       ),
     );
@@ -373,9 +431,12 @@ class _PostScreenState extends State<PostScreen> {
         _buildIconButton(Icons.videocam_outlined, _handleVideoAction),
         _buildIconButton(Icons.location_on_outlined, _getLocation),
         const Spacer(),
+        Text("PUBLIC", style: GoogleFonts.spaceMono(color: _isPublic ? const Color(0xFF00FFD1) : Colors.white54, fontSize: 10)),
         Switch(
           value: _isPublic,
-          activeColor: const Color(0xFFF0C38E),
+          activeColor: const Color(0xFF00FFD1),
+          inactiveThumbColor: Colors.white54,
+          inactiveTrackColor: Colors.white10,
           onChanged: (val) => setState(() => _isPublic = val),
         ),
       ],
@@ -386,10 +447,15 @@ class _PostScreenState extends State<PostScreen> {
     return Container(
       margin: const EdgeInsets.only(right: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFF48426D).withOpacity(0.5),
+        color: Colors.white.withOpacity(0.05),
         borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: Colors.white10)
       ),
-      child: IconButton(icon: Icon(icon, color: const Color(0xFFF1AA9B)), onPressed: onTap),
+      child: IconButton(
+        icon: Icon(icon, color: const Color(0xFF00FFD1)), 
+        onPressed: onTap,
+        splashColor: const Color(0xFF00FFD1).withOpacity(0.2),
+      ),
     );
   }
 }
