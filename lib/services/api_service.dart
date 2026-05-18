@@ -538,6 +538,8 @@ class ApiService {
     }
   }
 
+  static Future<Object?> getDashboardStats() async {}
+
 // Mettez à jour getAllUsers pour inclure les statuts
   /*
   static Future<List<dynamic>> getAllUsers() async {

@@ -8,7 +8,7 @@ import 'package:model2/screens/profile_screen.dart';
 import 'package:model2/screens/post_screen.dart';
 import 'package:model2/screens/message_screen.dart';
 import 'package:model2/screens/moderator_screen.dart';
-import 'package:model2/screens/admin_screen.dart';
+import 'package:model2/screens/admine/admin_screen.dart';
 import 'package:model2/providers/auth_provider.dart';
 
 void main() {

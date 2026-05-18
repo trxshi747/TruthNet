@@ -57,6 +57,7 @@ async function initializeFirstAdmin() {
                 password: $password,
                 status: $status,
                 createdAt: $createdAt
+
              })
              RETURN u`,
             {
@@ -69,7 +70,7 @@ async function initializeFirstAdmin() {
                 createdAt: createdAt
             }
         );
-
+ 
         // 4. Créer la relation HAS_ROLE
         await session.run(
             `MATCH (u:User {id: $userId})
