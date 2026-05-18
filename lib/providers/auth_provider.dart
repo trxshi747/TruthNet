@@ -8,6 +8,7 @@ class User {
   String email;
   String firstName;
   String lastName;
+  String username;
   UserRole role;
   String? profileImageUrl;
   String? bio;
@@ -20,6 +21,7 @@ class User {
     required this.email,
     required this.firstName,
     required this.lastName,
+    required this.username,
     required this.role,
     this.profileImageUrl,
     this.bio,
@@ -29,6 +31,7 @@ class User {
   });
 
   String get fullName => '$firstName $lastName';
+  String get displayName => '@$username';
 
   factory User.fromJson(Map<String, dynamic> json) {
     UserRole role = UserRole.member;
@@ -44,6 +47,7 @@ class User {
       email: json['email'] ?? '',
       firstName: json['firstName'] ?? '',
       lastName: json['lastName'] ?? '',
+      username: json['username'] ?? '',
       role: role,
       bio: json['bio'],
       profileImageUrl: json['avatar'],

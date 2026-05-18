@@ -55,7 +55,7 @@ class _PostScreenState extends State<PostScreen> {
 
   bool _isPublic = true;
   bool _isLoading = false;
-  XFile? _mediaFile;
+  List<XFile> _mediaFiles = [];
   bool _isVideo = false;
   String? _locationString;
   String? _placeName;
@@ -71,12 +71,22 @@ class _PostScreenState extends State<PostScreen> {
     _showPickerOptions(
       title: 'SELECT_IMAGE_SOURCE',
       onGallery: () async {
-        final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
-        if (image != null) setState(() { _mediaFile = image; _isVideo = false; });
+        final List<XFile>? images = await _picker.pickMultiImage();
+        if (images != null && images.isNotEmpty) {
+          setState(() {
+            _mediaFiles.addAll(images);
+            _isVideo = false;
+          });
+        }
       },
       onCamera: () async {
         final XFile? image = await _picker.pickImage(source: ImageSource.camera);
-        if (image != null) setState(() { _mediaFile = image; _isVideo = false; });
+        if (image != null) {
+          setState(() {
+            _mediaFiles.add(image);
+            _isVideo = false;
+          });
+        }
       },
     );
   }
@@ -86,11 +96,29 @@ class _PostScreenState extends State<PostScreen> {
       title: 'SELECT_VIDEO_SOURCE',
       onGallery: () async {
         final XFile? video = await _picker.pickVideo(source: ImageSource.gallery);
-        if (video != null) setState(() { _mediaFile = video; _isVideo = true; });
+        if (video != null) {
+          if (video.name.toLowerCase().endsWith('.mp4')) {
+            setState(() {
+              _mediaFiles = [video];
+              _isVideo = true;
+            });
+          } else {
+            _showFeedback("PROTOCOL_ERROR: ONLY_MP4_VIDEOS_ACCEPTED");
+          }
+        }
       },
       onCamera: () async {
         final XFile? video = await _picker.pickVideo(source: ImageSource.camera);
-        if (video != null) setState(() { _mediaFile = video; _isVideo = true; });
+        if (video != null) {
+          if (video.name.toLowerCase().endsWith('.mp4')) {
+            setState(() {
+              _mediaFiles = [video];
+              _isVideo = true;
+            });
+          } else {
+            _showFeedback("PROTOCOL_ERROR: ONLY_MP4_VIDEOS_ACCEPTED");
+          }
+        }
       },
     );
   }
@@ -173,7 +201,7 @@ class _PostScreenState extends State<PostScreen> {
   }
 
   Future<void> _handlePost() async {
-    if (_contentController.text.trim().isEmpty && _mediaFile == null) return;
+    if (_contentController.text.trim().isEmpty && _mediaFiles.isEmpty) return;
     setState(() => _isLoading = true);
 
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
@@ -188,7 +216,7 @@ class _PostScreenState extends State<PostScreen> {
         userId: userId,
         content: _contentController.text.trim(),
         isPublic: _isPublic,
-        mediaFile: _mediaFile,
+        mediaFiles: _mediaFiles.isNotEmpty ? _mediaFiles : null,
         isVideo: _isVideo,
         location: locData,
       );
@@ -249,7 +277,7 @@ class _PostScreenState extends State<PostScreen> {
               children: [
                 _buildHeader(authProvider).animate().fade(delay: 100.ms).slideY(begin: 0.2),
                 const SizedBox(height: 20),
-                if (_mediaFile != null) _buildMediaPreview().animate().fade().scale(begin: const Offset(0.9, 0.9)),
+                if (_mediaFiles.isNotEmpty) _buildMediaPreview().animate().fade().scale(begin: const Offset(0.9, 0.9)),
                 Expanded(
                   child: Stack(
                     children: [
@@ -279,17 +307,17 @@ class _PostScreenState extends State<PostScreen> {
           ),
           child: CircleAvatar(
             backgroundColor: AppTheme.darkPurple,
-            child: Text(auth.user?.fullName[0] ?? 'U', style: GoogleFonts.spaceMono(color: AppTheme.peach, fontWeight: FontWeight.bold)),
+            child: Text(auth.user?.username[0].toUpperCase() ?? 'U', style: GoogleFonts.spaceMono(color: AppTheme.peach, fontWeight: FontWeight.bold)),
           ),
         ),
         const SizedBox(width: 12),
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(auth.user?.fullName ?? 'USER', style: GoogleFonts.spaceMono(fontWeight: FontWeight.bold, color: Colors.white)),     
+            Text("@${auth.user?.username ?? 'USER'}", style: GoogleFonts.spaceMono(fontWeight: FontWeight.bold, color: Colors.white)),
             if (_locationString != null)
               Text(
-                "📍 ${_placeName != null ? '$_placeName ' : ''}($_locationString)", 
+                "📍 ${_placeName != null ? '$_placeName ' : ''}($_locationString)",
                 style: GoogleFonts.spaceMono(fontSize: 10, color: AppTheme.peach.withOpacity(0.8))
               ),
           ],
@@ -297,39 +325,55 @@ class _PostScreenState extends State<PostScreen> {
       ],
     );
   }
-
   Widget _buildMediaPreview() {
-    return Stack(
-      children: [
-        Container(
-          height: 180,
-          width: double.infinity,
-          margin: const EdgeInsets.only(bottom: 15),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(15),
-            border: Border.all(color: AppTheme.peach.withOpacity(0.5), width: 1),
-            boxShadow: [BoxShadow(color: AppTheme.peach.withOpacity(0.1), blurRadius: 20)]
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(14),
-            child: _isVideo
-                ? Container(color: Colors.black, child: const Icon(Icons.play_circle_fill, size: 50, color: AppTheme.peach))
-                : (kIsWeb
-                    ? Image.network(_mediaFile!.path, fit: BoxFit.cover)
-                    : Image.file(File(_mediaFile!.path), fit: BoxFit.cover)),
-          ),
-        ),
-        Positioned(
-          top: 5, right: 5,
-          child: Container(
-            decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.black54),
-            child: IconButton(
-              icon: const Icon(Icons.cancel, color: AppTheme.coral),
-              onPressed: () => setState(() => _mediaFile = null),
+    return Container(
+      height: 200,
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 15),
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        itemCount: _mediaFiles.length,
+        itemBuilder: (context, index) {
+          final file = _mediaFiles[index];
+          return Container(
+            width: 180,
+            margin: const EdgeInsets.only(right: 12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(15),
+              border: Border.all(color: AppTheme.peach.withOpacity(0.5), width: 1),
+              boxShadow: [BoxShadow(color: AppTheme.peach.withOpacity(0.1), blurRadius: 20)]
             ),
-          ),
-        )
-      ],
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(14),
+                  child: _isVideo
+                      ? Container(
+                          color: Colors.black, 
+                          child: const Icon(Icons.play_circle_fill, size: 50, color: AppTheme.peach)
+                        )
+                      : (kIsWeb
+                          ? Image.network(file.path, fit: BoxFit.cover)
+                          : Image.file(File(file.path), fit: BoxFit.cover)),
+                ),
+                Positioned(
+                  top: 5,
+                  right: 5,
+                  child: GestureDetector(
+                    onTap: () => setState(() => _mediaFiles.removeAt(index)),
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+                      child: const Icon(Icons.close, size: 16, color: AppTheme.coral),
+                    ),
+                  ),
+                )
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 
@@ -460,4 +504,16 @@ class _PostScreenState extends State<PostScreen> {
       ),
     );
   }
-}
+
+  void _showFeedback(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message, style: GoogleFonts.spaceMono(color: AppTheme.darkPurple, fontWeight: FontWeight.bold)),
+        backgroundColor: AppTheme.peach,
+        duration: const Duration(milliseconds: 2000),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+  }
+  }

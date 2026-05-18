@@ -21,6 +21,8 @@ dependencies:
   fl_chart: ^0.68.0
   flutter_animate: ^4.5.2
   shimmer: ^3.0.0
+  video_player: ^2.8.1
+  chewie: ^1.7.1
 
 dev_dependencies:
   flutter_test:

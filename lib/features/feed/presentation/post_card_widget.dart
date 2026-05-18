@@ -63,17 +63,16 @@ class PostCardWidget extends ConsumerWidget {
           ),
         ),
         if (post.mediaUrl != null)
-          // Edge-to-edge media
-          SizedBox(
+          // Edge-to-edge media with natural aspect ratio
+          Image.network(
+            "${ApiService.baseUrl.replaceFirst('/api', '')}${post.mediaUrl}",
             width: double.infinity,
-            height: 300,
-            child: Image.network(
-              "${ApiService.baseUrl.replaceFirst('/api', '')}${post.mediaUrl}",
-              fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) => Container(
-                color: theme.colorScheme.onSurface.withOpacity(0.05),
-                child: Icon(Icons.broken_image_rounded, color: theme.colorScheme.onSurface.withOpacity(0.2)),
-              ),
+            fit: BoxFit.fitWidth,
+            errorBuilder: (context, error, stackTrace) => Container(
+              height: 200,
+              width: double.infinity,
+              color: theme.colorScheme.onSurface.withOpacity(0.05),
+              child: Icon(Icons.broken_image_rounded, color: theme.colorScheme.onSurface.withOpacity(0.2)),
             ),
           ),
         Padding(

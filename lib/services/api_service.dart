@@ -42,7 +42,7 @@ class ApiService {
     required String userId,
     required String content,
     required bool isPublic,
-    XFile? mediaFile,
+    List<XFile>? mediaFiles,
     bool isVideo = false,
     String? location,
   }) async {
@@ -54,12 +54,14 @@ class ApiService {
       request.fields['isVideo'] = isVideo.toString();
       if (location != null) request.fields['location'] = location;
 
-      if (mediaFile != null) {
-        if (kIsWeb) {
-          final bytes = await mediaFile.readAsBytes();
-          request.files.add(http.MultipartFile.fromBytes('media', bytes, filename: mediaFile.name));
-        } else {
-          request.files.add(await http.MultipartFile.fromPath('media', mediaFile.path));
+      if (mediaFiles != null && mediaFiles.isNotEmpty) {
+        for (var file in mediaFiles) {
+          if (kIsWeb) {
+            final bytes = await file.readAsBytes();
+            request.files.add(http.MultipartFile.fromBytes('media', bytes, filename: file.name));
+          } else {
+            request.files.add(await http.MultipartFile.fromPath('media', file.path));
+          }
         }
       }
 
@@ -265,6 +267,28 @@ class ApiService {
       final response = await http.get(Uri.parse('$baseUrl/comments/$commentId/replies'));
       return jsonDecode(response.body);
     } catch (e) { return []; }
+  }
+
+  static Future<bool> updateComment(String commentId, String userId, String content) async {
+    try {
+      final response = await http.put(
+        Uri.parse('$baseUrl/comments/$commentId'),
+        body: jsonEncode({'userId': userId, 'content': content}),
+        headers: {'Content-Type': 'application/json'},
+      );
+      return jsonDecode(response.body)['success'] ?? false;
+    } catch (e) { return false; }
+  }
+
+  static Future<bool> deleteComment(String commentId, String userId) async {
+    try {
+      final response = await http.delete(
+        Uri.parse('$baseUrl/comments/$commentId'),
+        body: jsonEncode({'userId': userId}),
+        headers: {'Content-Type': 'application/json'},
+      );
+      return jsonDecode(response.body)['success'] ?? false;
+    } catch (e) { return false; }
   }
 
   static Future<List<dynamic>> searchUsers(String query) async {

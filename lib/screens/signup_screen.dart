@@ -20,6 +20,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final _usernameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
 
   @override
   void dispose() {
@@ -28,6 +29,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
     _usernameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
+    _confirmPasswordController.dispose();
     super.dispose();
   }
 
@@ -97,7 +99,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     icon: Icons.alternate_email_rounded,
                     validator: (value) {
                       if (value == null || value.isEmpty) return 'REQUIRED';
-                      if (value.contains(' ')) return 'NO_SPACES_ALLOWED';
+                      if (!RegExp(r'^[a-zA-Z0-9]+$').hasMatch(value)) {
+                        return 'ALPHANUMERIC_ONLY';
+                      }
                       return null;
                     },
                   ).animate().fade(delay: 600.ms).slideX(begin: -0.2),
@@ -115,9 +119,27 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     hint: 'ACCESS_KEY',
                     icon: Icons.lock_open_rounded,
                     isPassword: true,
-                    validator: (value) =>
-                        value != null && value.length >= 6 ? null : 'MIN_6_CHARS',
+                    validator: (value) {
+                      if (value == null || value.isEmpty) return 'REQUIRED';
+                      if (value.length < 8) return 'MIN_8_CHARS';
+                      if (!value.contains(RegExp(r'[a-zA-Z]')) || !value.contains(RegExp(r'[0-9]'))) {
+                        return 'MUST_CONTAIN_LETTERS_AND_NUMBERS';
+                      }
+                      return null;
+                    },
                   ).animate().fade(delay: 800.ms).slideX(begin: -0.2),
+                  const SizedBox(height: 15),
+                  _buildTextField(
+                    controller: _confirmPasswordController,
+                    hint: 'CONFIRM_ACCESS_KEY',
+                    icon: Icons.lock_outline_rounded,
+                    isPassword: true,
+                    validator: (value) {
+                      if (value == null || value.isEmpty) return 'REQUIRED';
+                      if (value != _passwordController.text) return 'KEYS_DO_NOT_MATCH';
+                      return null;
+                    },
+                  ).animate().fade(delay: 850.ms).slideX(begin: 0.2),
                   const SizedBox(height: 30),
                   Container(
                     decoration: BoxDecoration(
@@ -152,11 +174,29 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           if (response['success'] == true) {
                             Navigator.pushReplacementNamed(context, '/home');
                           } else {
-                            final message = response['message'] ?? 'REGISTRATION_FAILED';
+                            String message;
+                            switch (response['message']) {
+                              case 'EMAIL_EXISTS':
+                                message = 'EMAIL_ALREADY_IN_USE.SYS';
+                                break;
+                              case 'USERNAME_TAKEN':
+                                message = 'USERNAME_ALREADY_IN_USE.SYS';
+                                break;
+                              case 'PASSWORD_TOO_WEAK_OR_TOO_SHORT':
+                                message = 'ACCESS_KEY_PROTOCOL_VIOLATION';
+                                break;
+                              default:
+                                message = 'REGISTRATION_FAILED: ${response['message'] ?? 'UNKNOWN_ERROR'}';
+                            }
+                            
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
-                                content: Text(message, style: GoogleFonts.spaceMono()),
+                                content: Text(
+                                  message, 
+                                  style: GoogleFonts.spaceMono(fontWeight: FontWeight.bold)
+                                ),
                                 backgroundColor: AppTheme.coral,
+                                behavior: SnackBarBehavior.floating,
                               ),
                             );
                           }

@@ -59,11 +59,30 @@ app.post('/api/auth/register', async (req, res) => {
 // POST /api/auth/register - Final version with conditional profile and unique username
 app.post('/api/auth/register', async (req, res) => {
   const { email, password, firstName, lastName, username, role } = req.body;
+
+  // Username validation: Alphanumeric only
+  const usernameRegex = /^[a-zA-Z0-9]+$/;
+  if (!usernameRegex.test(username)) {
+    return res.status(400).json({ 
+      success: false, 
+      message: "USERNAME_INVALID_SYMBOLS_DETECTED" 
+    });
+  }
+
+  // Password validation: 8+ chars, letters and numbers
+  const passwordRegex = /^(?=.*[a-zA-Z])(?=.*\d).{8,}$/;
+  if (!passwordRegex.test(password)) {
+    return res.status(400).json({ 
+      success: false, 
+      message: "PASSWORD_TOO_WEAK_OR_TOO_SHORT" 
+    });
+  }
+
   const session = driver.session();
   try {
     // Check for existing email or username
     const check = await session.run(
-      'MATCH (u:User) WHERE u.email = $email OR u.username = $username RETURN u.email, u.username', 
+      'MATCH (u:User) WHERE u.email = $email OR u.username = $username RETURN u.email AS email, u.username AS username', 
       { email, username }
     );
     if (check.records.length > 0) {
@@ -139,10 +158,14 @@ app.post('/api/auth/register', async (req, res) => {
 });
 
 app.post('/api/auth/login', async (req, res) => {
-    const { email, password } = req.body;
+    const { email, password } = req.body; // Keeping field name 'email' for compatibility, but using it as identifier
     const session = driver.session();
     try {
-        const result = await session.run('MATCH (u:User {email: $email})-[:HAS_ROLE]->(r:Role) RETURN u, r.name as role', { email });
+        const result = await session.run(
+            'MATCH (u:User) WHERE u.email = $email OR u.username = $email ' +
+            'MATCH (u)-[:HAS_ROLE]->(r:Role) RETURN u, r.name as role', 
+            { email }
+        );
         if (result.records.length > 0) {
             const user = result.records[0].get('u').properties;
             if (await bcrypt.compare(password, user.password)) {
@@ -159,6 +182,16 @@ app.post('/api/auth/login', async (req, res) => {
 
 app.put('/api/auth/update-password', async (req, res) => {
     const { userId, oldPassword, newPassword } = req.body;
+
+    // Password validation: 8+ chars, letters and numbers
+    const passwordRegex = /^(?=.*[a-zA-Z])(?=.*\d).{8,}$/;
+    if (!passwordRegex.test(newPassword)) {
+        return res.status(400).json({ 
+            success: false, 
+            message: "PASSWORD_TOO_WEAK_OR_TOO_SHORT" 
+        });
+    }
+
     const session = driver.session();
     try {
         const result = await session.run('MATCH (u:User {id: $userId}) RETURN u', { userId });
@@ -192,10 +225,41 @@ app.put('/api/auth/update-email', async (req, res) => {
 
 app.post('/api/auth/admin/register', async (req, res) => {
     const { email, password, firstName, lastName, username, role } = req.body;
+
+    // Username validation: Alphanumeric only
+    const usernameRegex = /^[a-zA-Z0-9]+$/;
+    if (!usernameRegex.test(username)) {
+        return res.status(400).json({ 
+            success: false, 
+            message: "USERNAME_INVALID_SYMBOLS_DETECTED" 
+        });
+    }
+
+    // Password validation: 8+ chars, letters and numbers
+    const passwordRegex = /^(?=.*[a-zA-Z])(?=.*\d).{8,}$/;
+    if (!passwordRegex.test(password)) {
+        return res.status(400).json({ 
+            success: false, 
+            message: "PASSWORD_TOO_WEAK_OR_TOO_SHORT" 
+        });
+    }
+
     const session = driver.session();
     try {
-        const check = await session.run('MATCH (u:User {email: $email}) RETURN u', { email });
-        if (check.records.length > 0) return res.status(400).json({ success: false, message: "User exists" });
+        // Check for existing email or username
+        const check = await session.run(
+            'MATCH (u:User) WHERE u.email = $email OR u.username = $username RETURN u.email AS email, u.username AS username', 
+            { email, username }
+        );
+        if (check.records.length > 0) {
+            const existing = check.records[0];
+            if (existing.get('email') === email) {
+                return res.status(400).json({ success: false, field: 'email', message: "EMAIL_EXISTS" });
+            }
+            if (existing.get('username') === username) {
+                return res.status(400).json({ success: false, field: 'username', message: "USERNAME_TAKEN" });
+            }
+        }
 
         const hashedPassword = await bcrypt.hash(password, 10);
         const result = await session.run(
@@ -228,7 +292,7 @@ app.get('/api/feed', async (req, res) => {
         const result = await session.run(
             `MATCH (u:User)-[:OWNS_POST]->(p:Post)
              WHERE p.visibility = 'public' AND (p.isDeleted IS NULL OR p.isDeleted = false)
-             RETURN u.firstName + " " + u.lastName as author, u.id as authorId, p as post,
+             RETURN u.username as author, u.id as authorId, p as post,
                     COUNT { (p)<-[:HAS_REACTION]-() } as likeCount,
                     COUNT { (p)<-[:HAS_COMMENT]-() } as commentCount,
                     COUNT { (p)<-[:SHARED]-() } as shareCount,
@@ -257,8 +321,8 @@ app.get('/api/users/search', async (req, res) => {
     try {
         const result = await session.run(
             `MATCH (u:User)
-             WHERE toLower(u.firstName) CONTAINS toLower($query) OR toLower(u.lastName) CONTAINS toLower($query)
-             RETURN u.firstName + " " + u.lastName as name, u.id as id LIMIT 5`,
+             WHERE toLower(u.username) CONTAINS toLower($query)
+             RETURN u.username as name, u.id as id LIMIT 5`,
             { query: query || "" }
         );
         res.json(result.records.map(r => ({ name: r.get('name'), id: r.get('id') })));
@@ -294,7 +358,7 @@ app.post('/api/posts/like', async (req, res) => {
                 })
                 CREATE (u)-[:OWNS_REACTION]->(r)
                 CREATE (r)-[:TARGETS]->(p)
-                CREATE (p)-[:HAS_REACTION]->(r)
+                CREATE (r)-[:HAS_REACTION]->(p)
             `, { userId, postId });
             res.json({ success: true, action: 'liked' });
         }
@@ -328,22 +392,7 @@ app.post('/api/posts/save', async (req, res) => {
     finally { await session.close(); }
 });
 
-app.post('/api/posts/comment', async (req, res) => {
-    const { userId, postId, content } = req.body;
-    const session = driver.session();
-    try {
-        const result = await session.run(
-            `MATCH (u:User {id: $userId}), (p:Post {id: $postId})
-             CREATE (c:Comment {id: randomUUID(), content: $content, timestamp: timestamp()})
-             CREATE (u)-[:COMMENTED]->(c)-[:ON]->(p)
-             RETURN c`,
-            { userId, postId, content }
-        );
-        res.json({ success: true, comment: result.records[0].get('c').properties });
-    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
-    finally { await session.close(); }
-});
-
+// --- Admin Dashboard Metrics ---
 app.get('/api/admin/dashboard', async (req, res) => {
     const session = driver.session();
 
@@ -450,7 +499,7 @@ app.get('/api/users/:userId/posts', async (req, res) => {
         const result = await session.run(
             `MATCH (u:User {id: $userId})-[:OWNS_POST]->(p:Post)
              WHERE p.isDeleted IS NULL OR p.isDeleted = false
-             RETURN u.firstName + " " + u.lastName as author, p as post
+             RETURN u.username as author, p as post
              ORDER BY p.createdAt DESC`,
             { userId }
         );
@@ -466,7 +515,7 @@ app.get('/api/users/:userId/archive', async (req, res) => {
         const result = await session.run(
             `MATCH (u:User {id: $userId})-[:OWNS_POST]->(p:Post)
              WHERE p.isDeleted = true
-             RETURN u.firstName + " " + u.lastName as author, p as post
+             RETURN u.username as author, p as post
              ORDER BY p.createdAt DESC`,
             { userId }
         );
@@ -477,35 +526,48 @@ app.get('/api/users/:userId/archive', async (req, res) => {
 
 // --- POSTS ---
 
-app.post('/api/posts', upload.single('media'), async (req, res) => {
+app.post('/api/posts', upload.array('media', 10), async (req, res) => {
     const { userId, content, location } = req.body;
     const visibility = req.body.isPublic === 'true' ? 'public' : 'private';
     const isVideo = req.body.isVideo === 'true';
-    const mediaUrl = req.file ? `/uploads/${req.file.filename}` : null;
+
+    // Handle multiple files
+    const mediaUrls = req.files ? req.files.map(file => `/uploads/${file.filename}`) : [];
+
+    // Protocol Check: Strictly MP4 for videos
+    if (isVideo) {
+      const invalidFiles = req.files ? req.files.filter(f => !f.originalname.toLowerCase().endsWith('.mp4')) : [];
+      if (invalidFiles.length > 0) {
+        return res.status(400).json({ success: false, message: "PROTOCOL_VIOLATION: ONLY_MP4_ALLOWED" });
+      }
+    }
+
+    // Maintain mediaUrl field for backward compatibility (first image)
+    const primaryMediaUrl = mediaUrls.length > 0 ? mediaUrls[0] : null;
 
     const session = driver.session();
     try {
         const result = await session.run(
             `MATCH (u:User {id: $userId})
              CREATE (p:Post {
-                id: randomUUID(), 
-                content: $content, 
-                mediaUrl: $mediaUrl, 
-                location: $location, 
-                isVideo: $isVideo, 
-                visibility: $visibility, 
-                isDeleted: false, 
+                id: randomUUID(),
+                content: $content,
+                mediaUrl: $primaryMediaUrl,
+                mediaUrls: $mediaUrls,
+                location: $location,
+                isVideo: $isVideo,
+                visibility: $visibility,
+                isDeleted: false,
                 createdAt: timestamp()
              })
              CREATE (u)-[:OWNS_POST]->(p)
              RETURN p`,
-            { userId, content, mediaUrl, location: location || null, isVideo, visibility }
+            { userId, content, primaryMediaUrl, mediaUrls, location: location || null, isVideo, visibility }
         );
         res.json(result.records[0].get('p').properties);
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
     finally { await session.close(); }
 });
-
 
 // --- USERS SEARCH ---
 
@@ -580,7 +642,7 @@ app.get('/api/posts/:postId/comments', async (req, res) => {
     try {
         const result = await session.run(
             `MATCH (u:User)-[:OWNS_COMMENT]->(c:Comment)-[:TARGETS]->(p:Post {id: $postId})
-             RETURN u.firstName + " " + u.lastName as author, c as comment,
+             RETURN u.username as author, u.id as authorId, c as comment,
                     COUNT { (c)<-[:HAS_REACTION]-() } as likeCount,
                     COUNT { (c)<-[:REPLIED_TO]-(:Comment) } as replyCount
              ORDER BY c.createdAt ASC`,
@@ -588,6 +650,7 @@ app.get('/api/posts/:postId/comments', async (req, res) => {
         );
         res.json(result.records.map(r => ({
             author: r.get('author'),
+            authorId: r.get('authorId'),
             ...r.get('comment').properties,
             likeCount: r.get('likeCount').toInt(),
             replyCount: r.get('replyCount').toInt()
@@ -625,7 +688,7 @@ app.post('/api/comments/:commentId/like', async (req, res) => {
                 })
                 CREATE (u)-[:OWNS_REACTION]->(r)
                 CREATE (r)-[:TARGETS]->(c)
-                CREATE (c)-[:HAS_REACTION]->(r)
+                CREATE (r)-[:HAS_REACTION]->(c)
             `, { userId, commentId });
             res.json({ success: true, action: 'liked' });
         }
@@ -675,7 +738,7 @@ app.get('/api/comments/:commentId/replies', async (req, res) => {
     try {
         const result = await session.run(
             `MATCH (u:User)-[:OWNS_COMMENT]->(reply:Comment)-[:REPLIED_TO]->(target:Comment {id: $commentId})
-             RETURN u.firstName + " " + u.lastName as author, reply,
+             RETURN u.username as author, u.id as authorId, reply,
                     COUNT { (reply)<-[:HAS_REACTION]-() } as likeCount,
                     COUNT { (reply)<-[:REPLIED_TO]-(:Comment) } as replyCount
              ORDER BY reply.createdAt ASC`,
@@ -683,11 +746,52 @@ app.get('/api/comments/:commentId/replies', async (req, res) => {
         );
         res.json(result.records.map(r => ({
             author: r.get('author'),
+            authorId: r.get('authorId'),
             ...r.get('reply').properties,
             likeCount: r.get('likeCount').toInt(),
             replyCount: r.get('replyCount').toInt()
         })));
     } catch (e) { res.status(500).json([]); }
+    finally { await session.close(); }
+});
+
+app.put('/api/comments/:commentId', async (req, res) => {
+    const { commentId } = req.params;
+    const { userId, content } = req.body;
+    const session = driver.session();
+    try {
+        const result = await session.run(
+            `MATCH (u:User {id: $userId})-[:OWNS_COMMENT]->(c:Comment {id: $commentId})
+             SET c.content = $content, c.isEdited = true, c.updatedAt = timestamp()
+             RETURN c`,
+            { commentId, userId, content }
+        );
+        if (result.records.length > 0) {
+            res.json({ success: true, comment: result.records[0].get('c').properties });
+        } else {
+            res.status(403).json({ success: false, message: "UNAUTHORIZED_OR_NOT_FOUND" });
+        }
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+    finally { await session.close(); }
+});
+
+app.delete('/api/comments/:commentId', async (req, res) => {
+    const { commentId } = req.params;
+    const { userId } = req.body;
+    const session = driver.session();
+    try {
+        const result = await session.run(
+            `MATCH (u:User {id: $userId})-[:OWNS_COMMENT]->(c:Comment {id: $commentId})
+             DETACH DELETE c
+             RETURN count(c) as deletedCount`,
+            { commentId, userId }
+        );
+        if (result.records[0].get('deletedCount').toInt() > 0) {
+            res.json({ success: true });
+        } else {
+            res.status(403).json({ success: false, message: "UNAUTHORIZED_OR_NOT_FOUND" });
+        }
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
     finally { await session.close(); }
 });
 
@@ -1120,9 +1224,43 @@ app.get('/api/admin/moderators', async (req, res) => {
 // add moderator
 app.post('/api/admin/moderators', async (req, res) => {
     const { firstName, lastName, username, email, password, status } = req.body;
+
+    // Username validation: Alphanumeric only
+    const usernameRegex = /^[a-zA-Z0-9]+$/;
+    if (!usernameRegex.test(username)) {
+        return res.status(400).json({ 
+            success: false, 
+            message: "USERNAME_INVALID_SYMBOLS_DETECTED" 
+        });
+    }
+
+    // Password validation: 8+ chars, letters and numbers
+    const passwordRegex = /^(?=.*[a-zA-Z])(?=.*\d).{8,}$/;
+    if (!passwordRegex.test(password)) {
+        return res.status(400).json({ 
+            success: false, 
+            message: "PASSWORD_TOO_WEAK_OR_TOO_SHORT" 
+        });
+    }
+
     const session = driver.session();
 
     try {
+        // Check for existing email or username
+        const check = await session.run(
+            'MATCH (u:User) WHERE u.email = $email OR u.username = $username RETURN u.email AS email, u.username AS username', 
+            { email, username }
+        );
+        if (check.records.length > 0) {
+            const existing = check.records[0];
+            if (existing.get('email') === email) {
+                return res.status(400).json({ success: false, field: 'email', message: "EMAIL_EXISTS" });
+            }
+            if (existing.get('username') === username) {
+                return res.status(400).json({ success: false, field: 'username', message: "USERNAME_TAKEN" });
+            }
+        }
+
         const hashedPassword = await bcrypt.hash(password, 10);
 
         await session.run(`

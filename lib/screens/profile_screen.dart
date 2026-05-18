@@ -12,6 +12,9 @@ import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
+import 'package:model2/widgets/video_player_widget.dart';
+import 'package:model2/widgets/video_player_widget.dart'; // Duplicate but checking imports
+
 import 'package:model2/core/theme/app_theme.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -242,8 +245,7 @@ class ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildProfileHeader() {
-    String name = "${_profileData?['firstName'] ?? ''} ${_profileData?['lastName'] ?? ''}".trim();
-    if (name.isEmpty) name = "UNKNOWN";
+    String username = _profileData?['username'] ?? 'user';
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 25.0),
@@ -264,7 +266,7 @@ class ProfileScreenState extends State<ProfileScreen> {
                 ? NetworkImage("${ApiService.baseUrl.replaceFirst('/api', '')}${_profileData?['avatar']}")      
                 : null,
               child: _profileData?['avatar'] == null
-                ? Text(name[0].toUpperCase(), style: GoogleFonts.righteous(fontSize: 30, color: AppTheme.peach))  
+                ? Text(username[0].toUpperCase(), style: GoogleFonts.righteous(fontSize: 30, color: AppTheme.peach))  
                 : null,
             ),
           ),
@@ -276,7 +278,7 @@ class ProfileScreenState extends State<ProfileScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(name, style: GoogleFonts.righteous(fontSize: 22, color: AppTheme.peach)),     
+                    Text("@$username", style: GoogleFonts.righteous(fontSize: 22, color: AppTheme.peach)),     
                     Container(
                       decoration: BoxDecoration(
                         color: Colors.white.withOpacity(0.05),
@@ -294,7 +296,7 @@ class ProfileScreenState extends State<ProfileScreen> {
                     ),
                   ],
                 ),
-                Text("@${_profileData?['username'] ?? 'user'}", style: GoogleFonts.spaceMono(color: AppTheme.coral, fontSize: 12)),
+                Text("${_profileData?['firstName'] ?? ''} ${_profileData?['lastName'] ?? ''}".trim(), style: GoogleFonts.spaceMono(color: AppTheme.coral.withOpacity(0.7), fontSize: 11)),
                 const SizedBox(height: 8),
                 Text(_profileData?['bio'] ?? "NO_DATA_AVAILABLE", style: GoogleFonts.spaceMono(color: Colors.white70, fontSize: 11)),
                 const SizedBox(height: 12),
@@ -393,42 +395,59 @@ class ProfileScreenState extends State<ProfileScreen> {
       itemCount: list.length,
       itemBuilder: (context, index) {
         final item = list[index];
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(15),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-            child: Container(
-              margin: const EdgeInsets.only(bottom: 15),
-              padding: const EdgeInsets.all(15),
-              decoration: BoxDecoration(
-                color: AppTheme.mediumPurple.withOpacity(0.6),
-                borderRadius: BorderRadius.circular(15),
-                border: Border.all(color: AppTheme.peach.withOpacity(0.1)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+        return Container(
+          margin: const EdgeInsets.only(bottom: 15),
+          padding: const EdgeInsets.all(15),
+          decoration: BoxDecoration(
+            color: AppTheme.mediumPurple.withOpacity(0.8),
+            borderRadius: BorderRadius.circular(15),
+            border: Border.all(color: AppTheme.peach.withOpacity(0.1)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(item['author'] ?? "SOURCE", style: GoogleFonts.spaceMono(color: AppTheme.peach, fontSize: 10, fontWeight: FontWeight.bold)),
-                      if (_currentTab == 1) // Only show permanent delete in Archive
-                        IconButton(
-                          icon: const Icon(Icons.delete_forever_rounded, color: AppTheme.coral, size: 20),        
-                          onPressed: () => _handlePermanentDelete(item['id']),
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Text(item['content'] ?? "", style: GoogleFonts.spaceMono(color: Colors.white, fontSize: 12)),     
-                  const SizedBox(height: 12),
-                  if (item['id'] != null)
-                    Text("ID: ${item['id'].toString().substring(0,8)}...", style: GoogleFonts.spaceMono(color: AppTheme.peach.withOpacity(0.5), fontSize: 8)),
+                  Text("@${item['author'] ?? "SOURCE"}", style: GoogleFonts.spaceMono(color: AppTheme.peach, fontSize: 10, fontWeight: FontWeight.bold)),
+                  if (_currentTab == 1) // Only show permanent delete in Archive
+                    IconButton(
+                      icon: const Icon(Icons.delete_forever_rounded, color: AppTheme.coral, size: 20),        
+                      onPressed: () => _handlePermanentDelete(item['id']),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
                 ],
               ),
-            ),
+              const SizedBox(height: 10),
+              Text(item['content'] ?? "", style: GoogleFonts.spaceMono(color: Colors.white, fontSize: 12)),     
+              const SizedBox(height: 12),
+              if (item['mediaUrl'] != null)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 10),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.white.withOpacity(0.05)),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(9),
+                    child: item['isVideo'] == true
+                      ? Container(
+                          height: 150,
+                          child: VideoPlayerWidget(
+                            videoUrl: "${ApiService.baseUrl.replaceFirst('/api', '')}${item['mediaUrl']}",
+                          ),
+                        )
+                      : Image.network(
+                          "${ApiService.baseUrl.replaceFirst('/api', '')}${item['mediaUrl']}",
+                          width: double.infinity,
+                          fit: BoxFit.cover,
+                        ),
+                  ),
+                ),
+              if (item['id'] != null)
+                Text("ID: ${item['id'].toString().substring(0,8)}...", style: GoogleFonts.spaceMono(color: AppTheme.peach.withOpacity(0.5), fontSize: 8)),
+            ],
           ),
         ).animate().fade(duration: 300.ms, delay: (index * 50).ms).slideX(begin: 0.1);
       },

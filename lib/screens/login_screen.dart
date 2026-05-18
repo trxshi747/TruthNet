@@ -74,10 +74,12 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 80),
                   _buildTextField(
                     controller: _emailController,
-                    hint: 'USER_ID / EMAIL',
+                    hint: 'USER_ID_OR_EMAIL',
                     icon: Icons.alternate_email_rounded,
-                    validator: (value) =>
-                        value != null && value.contains('@') ? null : 'INVALID_EMAIL',
+                    validator: (value) {
+                      if (value == null || value.isEmpty) return 'REQUIRED';
+                      return null;
+                    },
                   ).animate().fade(delay: 500.ms).slideX(begin: -0.2),
                   const SizedBox(height: 20),
                   _buildTextField(
@@ -127,11 +129,26 @@ class _LoginScreenState extends State<LoginScreen> {
                               Navigator.pushReplacementNamed(context, '/home');
                             }
                           } else {
-                            final message = response['message'] ?? 'LOGIN_FAILED: UNKNOWN_ERROR';
+                            String message;
+                            switch (response['message']) {
+                              case 'INVALID_CREDENTIALS':
+                                message = 'ACCESS_DENIED: INVALID_CREDENTIALS';
+                                break;
+                              case 'USER_NOT_FOUND':
+                                message = 'IDENTITY_NOT_FOUND.SYS';
+                                break;
+                              default:
+                                message = 'LOGIN_FAILED: ${response['message'] ?? 'UNKNOWN_ERROR'}';
+                            }
+                            
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
-                                content: Text(message, style: GoogleFonts.spaceMono()),
+                                content: Text(
+                                  message, 
+                                  style: GoogleFonts.spaceMono(fontWeight: FontWeight.bold)
+                                ),
                                 backgroundColor: AppTheme.coral,
+                                behavior: SnackBarBehavior.floating,
                               ),
                             );
                           }

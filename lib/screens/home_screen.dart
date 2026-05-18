@@ -11,6 +11,8 @@ import 'package:model2/widgets/custom_floating_nav_bar.dart';
 import 'package:model2/screens/profile_screen.dart';
 import 'package:share_plus/share_plus.dart';
 
+import 'package:model2/widgets/video_player_widget.dart';
+
 import 'package:model2/core/theme/app_theme.dart';
 
 // Global key to trigger profile refresh from outside
@@ -57,9 +59,9 @@ class _HomeScreenState extends State<HomeScreen> {
     _fetchFeed();
   }
 
-  Future<void> _fetchFeed() async {
+  Future<void> _fetchFeed({bool showLoading = true}) async {
     if (!mounted) return;
-    setState(() => _isLoading = true);
+    if (showLoading) setState(() => _isLoading = true);
     final auth = Provider.of<AuthProvider>(context, listen: false);
     final feed = await ApiService.getFeed(auth.user?.id);
     if (!mounted) return;
@@ -76,9 +78,22 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
 
+    // Optimistic UI update
+    setState(() {
+      final index = _posts.indexWhere((p) => p['id'] == postId);
+      if (index != -1) {
+        final post = _posts[index];
+        final bool currentlyLiked = post['isLiked'] ?? false;
+        post['isLiked'] = !currentlyLiked;
+        post['likeCount'] = currentlyLiked ? (post['likeCount'] ?? 1) - 1 : (post['likeCount'] ?? 0) + 1;
+      }
+    });
+
     final success = await ApiService.likePost(authProvider.user!.id, postId);
     if (success) {
-      _fetchFeed(); 
+      _fetchFeed(showLoading: false); 
+    } else {
+      _fetchFeed(); // Revert/Refresh properly on failure
     }
   }
 
@@ -89,10 +104,20 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
 
+    // Optimistic UI update
+    setState(() {
+      final index = _posts.indexWhere((p) => p['id'] == postId);
+      if (index != -1) {
+        _posts[index]['isSaved'] = !(_posts[index]['isSaved'] ?? false);
+      }
+    });
+
     final success = await ApiService.savePost(authProvider.user!.id, postId);
     if (success) {
-      _fetchFeed(); 
+      _fetchFeed(showLoading: false); 
       _showFeedback("TRANSMISSION_STATUS_UPDATED");
+    } else {
+      _fetchFeed();
     }
   }
 
@@ -105,8 +130,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       if (authProvider.user != null) {
+        // Optimistic UI update
+        setState(() {
+          final index = _posts.indexWhere((p) => p['id'] == postId);
+          if (index != -1) {
+            _posts[index]['shareCount'] = (_posts[index]['shareCount'] ?? 0) + 1;
+          }
+        });
+
         await ApiService.sharePost(authProvider.user!.id, postId);
-        _fetchFeed();
+        _fetchFeed(showLoading: false);
       }
     } catch (e) {
       debugPrint("DEBUG: SHARE_ERROR: $e");
@@ -184,8 +217,12 @@ class _HomeScreenState extends State<HomeScreen> {
                             itemBuilder: (context, index) {
                               final comment = _comments[index];
                               final commentId = comment['id'];
+                              final authorId = comment['authorId'];
                               final bool hasReplies = (comment['replyCount'] ?? 0) > 0;
                               final bool isExpanded = _repliesMap.containsKey(commentId);
+                              
+                              final auth = Provider.of<AuthProvider>(context, listen: false);
+                              final bool isOwner = auth.user?.id == authorId;
 
                               return Container(
                                 margin: const EdgeInsets.only(bottom: 15),
@@ -194,11 +231,10 @@ class _HomeScreenState extends State<HomeScreen> {
                                   children: [
                                     Row(
                                       children: [
-                                        Text(comment['author'] ?? "ANON", 
+                                        Text("@${comment['author'] ?? "ANON"}", 
                                           style: GoogleFonts.spaceMono(color: AppTheme.coral, fontWeight: FontWeight.bold, fontSize: 12)),
                                         const Spacer(),
                                         _buildSmallAction(Icons.favorite_rounded, "${comment['likeCount'] ?? 0}", AppTheme.coral, () async {
-                                          final auth = Provider.of<AuthProvider>(context, listen: false);
                                           if (auth.user != null) {
                                             await ApiService.likeComment(auth.user!.id, commentId);
                                             final updated = await ApiService.getComments(postId);
@@ -210,8 +246,40 @@ class _HomeScreenState extends State<HomeScreen> {
                                           setModalState(() {
                                             _replyToId = commentId;
                                             _replyToAuthor = comment['author'];
+                                            final tag = "@$_replyToAuthor ";
+                                            if (!_commentController.text.startsWith(tag)) {
+                                              _commentController.text = tag + _commentController.text;
+                                              _commentController.selection = TextSelection.fromPosition(TextPosition(offset: _commentController.text.length));
+                                            }
                                           });
                                         }),
+                                        if (isOwner) ...[
+                                          const SizedBox(width: 5),
+                                          PopupMenuButton<String>(
+                                            icon: const Icon(Icons.more_vert_rounded, size: 14, color: Colors.white24),
+                                            padding: EdgeInsets.zero,
+                                            constraints: const BoxConstraints(minWidth: 80),
+                                            color: AppTheme.mediumPurple,
+                                            onSelected: (val) {
+                                              if (val == 'edit') {
+                                                _showEditCommentDialog(commentId, comment['content'], () async {
+                                                  final updated = await ApiService.getComments(postId);
+                                                  setModalState(() => _comments = updated);
+                                                });
+                                              } else if (val == 'delete') {
+                                                _handleDeleteComment(commentId, () async {
+                                                  final updated = await ApiService.getComments(postId);
+                                                  setModalState(() => _comments = updated);
+                                                  _fetchFeed();
+                                                });
+                                              }
+                                            },
+                                            itemBuilder: (context) => [
+                                              PopupMenuItem(value: 'edit', child: Text("EDIT", style: GoogleFonts.spaceMono(fontSize: 10, color: Colors.white))),
+                                              PopupMenuItem(value: 'delete', child: Text("DELETE", style: GoogleFonts.spaceMono(fontSize: 10, color: AppTheme.coral))),
+                                            ],
+                                          ),
+                                        ],
                                       ],
                                     ),
                                     _buildRichText(comment['content'] ?? "", fontSize: 13),
@@ -235,29 +303,70 @@ class _HomeScreenState extends State<HomeScreen> {
                                                     style: GoogleFonts.spaceMono(color: AppTheme.peach.withOpacity(0.5), fontSize: 10, decoration: TextDecoration.underline)),
                                                ),
                                              if (isExpanded)
-                                               ...(_repliesMap[commentId] ?? []).map((reply) => Padding(
+                                               ...(_repliesMap[commentId] ?? []).map((reply) {
+                                                 final bool isReplyOwner = auth.user?.id == reply['authorId'];
+                                                 return Padding(
                                                  padding: const EdgeInsets.only(top: 8),
                                                  child: Column(
                                                    crossAxisAlignment: CrossAxisAlignment.start,
                                                    children: [
                                                      Row(
                                                        children: [
-                                                         Text(reply['author'] ?? "ANON", style: GoogleFonts.spaceMono(color: AppTheme.coral, fontSize: 11, fontWeight: FontWeight.bold)),
+                                                         Text("@${reply['author'] ?? "ANON"}", style: GoogleFonts.spaceMono(color: AppTheme.coral, fontSize: 11, fontWeight: FontWeight.bold)),
                                                          const Spacer(),
                                                          _buildSmallAction(Icons.favorite_rounded, "${reply['likeCount'] ?? 0}", AppTheme.coral, () async {
-                                                           final auth = Provider.of<AuthProvider>(context, listen: false);
                                                            if (auth.user != null) {
                                                              await ApiService.likeComment(auth.user!.id, reply['id']);
                                                              final updatedReplies = await ApiService.getReplies(commentId);
                                                              setModalState(() => _repliesMap[commentId] = updatedReplies);
                                                            }
                                                          }),
+                                                         const SizedBox(width: 10),
+                                                         _buildSmallAction(Icons.reply_rounded, "", Colors.white54, () {
+                                                           setModalState(() {
+                                                             _replyToId = commentId; // Targets the top-level comment
+                                                             _replyToAuthor = reply['author'];
+                                                             final tag = "@$_replyToAuthor ";
+                                                             if (!_commentController.text.startsWith(tag)) {
+                                                               _commentController.text = tag + _commentController.text;
+                                                               _commentController.selection = TextSelection.fromPosition(TextPosition(offset: _commentController.text.length));
+                                                             }
+                                                           });
+                                                         }),
+                                                         if (isReplyOwner) ...[
+                                                           const SizedBox(width: 5),
+                                                           PopupMenuButton<String>(
+                                                              icon: const Icon(Icons.more_vert_rounded, size: 12, color: Colors.white24),
+                                                              padding: EdgeInsets.zero,
+                                                              constraints: const BoxConstraints(minWidth: 80),
+                                                              color: AppTheme.mediumPurple,
+                                                              onSelected: (val) {
+                                                                if (val == 'edit') {
+                                                                  _showEditCommentDialog(reply['id'], reply['content'], () async {
+                                                                    final updatedReplies = await ApiService.getReplies(commentId);
+                                                                    setModalState(() => _repliesMap[commentId] = updatedReplies);
+                                                                  });
+                                                                } else if (val == 'delete') {
+                                                                  _handleDeleteComment(reply['id'], () async {
+                                                                    final updatedReplies = await ApiService.getReplies(commentId);
+                                                                    setModalState(() => _repliesMap[commentId] = updatedReplies);
+                                                                    final updatedComments = await ApiService.getComments(postId);
+                                                                    setModalState(() => _comments = updatedComments);
+                                                                  });
+                                                                }
+                                                              },
+                                                              itemBuilder: (context) => [
+                                                                PopupMenuItem(value: 'edit', child: Text("EDIT", style: GoogleFonts.spaceMono(fontSize: 10, color: Colors.white))),
+                                                                PopupMenuItem(value: 'delete', child: Text("DELETE", style: GoogleFonts.spaceMono(fontSize: 10, color: AppTheme.coral))),
+                                                              ],
+                                                            ),
+                                                         ],
                                                        ],
                                                      ),
                                                      _buildRichText(reply['content'] ?? "", fontSize: 12, defaultColor: Colors.white70),
                                                    ],
                                                  ),
-                                               )).toList(),
+                                               );}).toList(),
                                            ],
                                          ),
                                        ),
@@ -376,7 +485,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   _replyToId = null;
                                   _repliesMap.clear(); 
                                 });
-                                _fetchFeed();
+                                _fetchFeed(showLoading: false);
                               }
                             } else {
                               _showFeedback("LOGIN_REQUIRED_TO_COMMENT");
@@ -394,6 +503,90 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
     );
+  }
+
+  void _showEditCommentDialog(String commentId, String currentContent, VoidCallback onUpdated) {
+    final _editController = TextEditingController(text: currentContent);
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.mediumPurple.withOpacity(0.95),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: AppTheme.peach.withOpacity(0.5)),
+        ),
+        title: Text("EDIT_RESPONSE", style: GoogleFonts.righteous(color: AppTheme.peach)),
+        content: TextField(
+          controller: _editController,
+          maxLines: null,
+          style: GoogleFonts.spaceMono(color: Colors.white),
+          decoration: InputDecoration(
+            hintText: "UPDATE_RESPONSE...",
+            hintStyle: GoogleFonts.spaceMono(color: Colors.white24),
+            enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
+            focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppTheme.peach)),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text("CANCEL", style: GoogleFonts.spaceMono(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+               backgroundColor: AppTheme.peach,
+               foregroundColor: AppTheme.darkPurple,
+            ),
+            onPressed: () async {
+              final auth = Provider.of<AuthProvider>(context, listen: false);
+              final success = await ApiService.updateComment(commentId, auth.user!.id, _editController.text.trim());
+              Navigator.pop(context);
+              if (success) {
+                onUpdated();
+                _showFeedback("RESPONSE_UPDATED");
+              } else {
+                _showFeedback("EDIT_FAILED_UNAUTHORIZED");
+              }
+            },
+            child: Text("UPDATE", style: GoogleFonts.spaceMono(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _handleDeleteComment(String commentId, VoidCallback onDeleted) async {
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.mediumPurple.withOpacity(0.95),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: AppTheme.coral.withOpacity(0.5)),
+        ),
+        title: Text("DELETE_CONFIRMATION", style: GoogleFonts.righteous(color: AppTheme.coral)),
+        content: Text("ERASE_THIS_RESPONSE_PERMANENTLY?", style: GoogleFonts.spaceMono(color: Colors.white70)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text("NO", style: GoogleFonts.spaceMono(color: Colors.white))),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.coral, foregroundColor: Colors.white),
+            onPressed: () => Navigator.pop(context, true), 
+            child: Text("YES_ERASE", style: GoogleFonts.spaceMono(fontWeight: FontWeight.bold))
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      final success = await ApiService.deleteComment(commentId, auth.user!.id);
+      if (success) {
+        onDeleted();
+        _showFeedback("RESPONSE_ERASED");
+      } else {
+        _showFeedback("ERASE_FAILED_UNAUTHORIZED");
+      }
+    }
   }
 
   void _showEditDialog(String postId, String currentContent) {
@@ -697,20 +890,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
         final bool isOwner = auth.user?.id == authorId;
 
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(20),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-            child: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppTheme.mediumPurple.withOpacity(0.6),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: AppTheme.peach.withOpacity(0.1)),
-                boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10)],
-              ),
-              child: Column(
+        return Container(
+          margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: AppTheme.mediumPurple.withOpacity(0.85), // Increased opacity to maintain look without blur
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: AppTheme.peach.withOpacity(0.1)),
+            boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10)],
+          ),
+          child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
@@ -730,7 +919,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(author, style: GoogleFonts.spaceMono(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 14)),
+                            Text("@$author", style: GoogleFonts.spaceMono(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 14)),
                             if (location != null)
                               Text("📍 $location", style: GoogleFonts.spaceMono(color: AppTheme.peach.withOpacity(0.8), fontSize: 9)),
                           ],
@@ -767,9 +956,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     padding: const EdgeInsets.symmetric(vertical: 16.0),
                     child: _buildRichText(content, fontSize: 13),
                   ),
-                  if (mediaUrl != null)
+                  if (post['mediaUrls'] != null && (post['mediaUrls'] as List).isNotEmpty)
+                    _PostCarousel(urls: post['mediaUrls'] as List, isVideo: post['isVideo'] == true)
+                  else if (mediaUrl != null)
                     Container(
-                      height: 220,
                       width: double.infinity,
                       margin: const EdgeInsets.only(bottom: 10),
                       decoration: BoxDecoration(
@@ -779,20 +969,28 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(14),
-                        child: Image.network(
-                          "${ApiService.baseUrl.replaceFirst('/api', '')}$mediaUrl",
-                          fit: BoxFit.contain,
-                          errorBuilder: (context, error, stackTrace) {
-                            return const Icon(Icons.broken_image, color: Colors.white10);
-                          },
-                        ),
+                        child: post['isVideo'] == true
+                          ? VideoPlayerWidget(
+                              videoUrl: "${ApiService.baseUrl.replaceFirst('/api', '')}$mediaUrl",
+                            )
+                          : Image.network(
+                              "${ApiService.baseUrl.replaceFirst('/api', '')}$mediaUrl",
+                              width: double.infinity,
+                              fit: BoxFit.fitWidth,
+                              errorBuilder: (context, error, stackTrace) {
+                                return const SizedBox(
+                                  height: 200,
+                                  child: Icon(Icons.broken_image, color: Colors.white10),
+                                );
+                              },
+                            ),
                       ),
                     ),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       _buildActionButton(
-                        Icons.favorite_rounded, 
+                        isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded, 
                         '$likeCount', 
                         isLiked ? AppTheme.coral : Colors.white30, 
                         () => _handleLike(postId)
@@ -809,8 +1007,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ],
               ),
-            ),
-          ),
         ).animate().fade(duration: 400.ms, delay: (index * 100).ms).slideY(begin: 0.1); // Staggered Animation
       },
     );
@@ -838,4 +1034,82 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
+}
+
+class _PostCarousel extends StatefulWidget {
+  final List urls;
+  final bool isVideo;
+  const _PostCarousel({required this.urls, this.isVideo = false});
+
+  @override
+  _PostCarouselState createState() => _PostCarouselState();
+}
+
+class _PostCarouselState extends State<_PostCarousel> {
+  int _currentPage = 0;
+  final PageController _controller = PageController();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Container(
+          height: 300,
+          width: double.infinity,
+          margin: const EdgeInsets.only(bottom: 5),
+          child: ScrollConfiguration(
+            behavior: _CarouselScrollBehavior(),
+            child: PageView.builder(
+              controller: _controller,
+              itemCount: widget.urls.length,
+              onPageChanged: (idx) => setState(() => _currentPage = idx),
+              itemBuilder: (context, idx) {
+                return Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 2),
+                  decoration: BoxDecoration(
+                    color: AppTheme.darkPurple.withOpacity(0.5),
+                    borderRadius: BorderRadius.circular(15),
+                    border: Border.all(color: Colors.white.withOpacity(0.05)),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(14),
+                    child: widget.isVideo 
+                      ? VideoPlayerWidget(videoUrl: "${ApiService.baseUrl.replaceFirst('/api', '')}${widget.urls[idx]}")
+                      : Image.network(
+                          "${ApiService.baseUrl.replaceFirst('/api', '')}${widget.urls[idx]}",
+                          width: double.infinity,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) => const Center(child: Icon(Icons.broken_image, color: Colors.white10)),
+                        ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+        if (widget.urls.length > 1)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: List.generate(widget.urls.length, (idx) => Container(
+              margin: const EdgeInsets.symmetric(horizontal: 3),
+              width: 6, height: 6,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: _currentPage == idx ? AppTheme.peach : Colors.white10,
+              ),
+            )),
+          ),
+        const SizedBox(height: 10),
+      ],
+    );
+  }
+}
+
+class _CarouselScrollBehavior extends MaterialScrollBehavior {
+  @override
+  Set<PointerDeviceKind> get dragDevices => {
+    PointerDeviceKind.touch,
+    PointerDeviceKind.mouse,
+    PointerDeviceKind.trackpad,
+  };
 }
