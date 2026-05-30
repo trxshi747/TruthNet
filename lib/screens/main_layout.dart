@@ -43,12 +43,12 @@ class _MainLayoutState extends State<MainLayout> {
     final theme = Theme.of(context);
 
     final List<Widget> screens = [
-      const HomeScreen(),
+      HomeScreen(),
       Center(child: Text('Searching...', style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.secondary))),
     ];
     
     if (role != UserRole.guest) {
-      screens.add(const MessageScreen());
+      screens.add(MessageScreen());
       screens.add(ProfileScreen(key: profileKey));
     }
     if (role == UserRole.moderator || role == UserRole.admin) {
@@ -63,7 +63,7 @@ class _MainLayoutState extends State<MainLayout> {
       body: Stack(
         children: [
           // Layer 1: Dynamic Background
-          const DynamicBackground(),
+          const DynamicBackground(child: null,),
           
           // Layer 2: Screens
           Positioned.fill(

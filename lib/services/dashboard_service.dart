@@ -9,45 +9,39 @@ class DashboardService {
     return 'http://10.0.2.2:3000/api';
   }
 
-  // KPI global
+  // ✅ FIXED: single correct endpoint
   static Future<Map<String, dynamic>> getMetrics() async {
     try {
       final res = await http.get(
-        Uri.parse('$baseUrl/admin/dashboard/metrics'),
+        Uri.parse('$baseUrl/admin/dashboard'),
       );
 
-      return jsonDecode(res.body);
+      if (res.statusCode != 200) {
+        throw Exception('Failed to load dashboard');
+      }
+
+      final data = jsonDecode(res.body);
+
+      return {
+        "users": data["users"] ?? 0,
+        "posts": data["posts"] ?? 0,
+        "comments": data["comments"] ?? 0,
+      };
     } catch (e) {
-      return {};
+      return {
+        "users": 0,
+        "posts": 0,
+        "comments": 0,
+      };
     }
   }
 
-  // sentiment analysis
+  // ⚠️ These two still don't exist in backend (safe fallback)
   static Future<Map<String, dynamic>> getSentiment() async {
-    try {
-      final res = await http.get(
-        Uri.parse('$baseUrl/admin/dashboard/sentiment'),
-      );
-
-      return jsonDecode(res.body);
-    } catch (e) {
-      return {"positive": 0, "neutral": 0, "negative": 0};
-    }
+    return {"positive": 0, "neutral": 0, "negative": 0};
   }
 
-  // reports stats
   static Future<Map<String, dynamic>> getReportsStats() async {
-    try {
-      final res = await http.get(
-        Uri.parse('$baseUrl/admin/dashboard/reports'),
-      );
-
-      return jsonDecode(res.body);
-    } catch (e) {
-      return {};
-    }
+    return {};
   }
-
-
-
 }
