@@ -1,30 +1,31 @@
 version: "3.9"
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  Only the Python AI service runs in Docker.
-#  Node.js (port 3000) and Flutter stay on your local machine as usual.
-# ─────────────────────────────────────────────────────────────────────────────
-
 services:
   ai_service:
     build:
-      context: .       # folder that contains the Dockerfile
+      context: .
       dockerfile: Dockerfile
     container_name: truthnet_ai
     restart: unless-stopped
     ports:
-      - "8000:8000"                # host:container — Node.js calls localhost:8000
+      - "8000:8000"
     environment:
       - ENV=production
       - AI_PORT=8000
-      # Allow calls from the local Node.js process
       - ALLOWED_ORIGINS=http://localhost:3000,http://host.docker.internal:3000
-    # Lets the container reach the host machine's localhost (Node.js / Neo4j)
+      # Force CPU — no GPU errors on laptops
+      - CUDA_VISIBLE_DEVICES=""
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    # Limit RAM so it doesn't freeze your laptop
+    deploy:
+      resources:
+        limits:
+          memory: 2g        # RoBERTa + toxic model fit comfortably in 1.5GB
+          cpus: "2.0"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 60s       # give the server time to load the models
+      start_period: 30s

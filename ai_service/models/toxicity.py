@@ -6,6 +6,7 @@ Multi-label classifier:
 
 from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification
 from functools import lru_cache
+import torch
 import logging
 
 logger = logging.getLogger(__name__)
@@ -34,7 +35,8 @@ def _get_pipeline():
         "text-classification",
         model=model,
         tokenizer=tokenizer,
-        top_k=None,        # return all label scores
+        top_k=None,
+        device="cpu",     # explicit CPU — no CUDA needed
         truncation=True,
         max_length=512,
     )

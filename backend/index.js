@@ -1497,7 +1497,187 @@ app.get('/api/admin/stats/posts-per-day', async (req, res) => {
     }
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// AJOUTER dans server.js — Bridge Node.js ↔ Python AI Service
+// Coller AVANT app.listen(3000, ...)
+// ─────────────────────────────────────────────────────────────────────────────
 
+const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000';
+
+// ── Helper: call the Python AI service ────────────────────────────────────────
+async function callAI(path, body) {
+    const res = await fetch(`${AI_SERVICE_URL}${path}`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(`AI service error: ${res.status}`);
+    return res.json();
+}
+
+// ── POST /api/ai/analyze/comment ──────────────────────────────────────────────
+// Analyse a single comment in real-time (called when a comment is posted)
+app.post('/api/ai/analyze/comment', async (req, res) => {
+    const { text } = req.body;
+    if (!text) return res.status(400).json({ success: false, message: 'text is required' });
+
+    try {
+        const result = await callAI('/analyze/full', { text });
+        res.json(result);
+    } catch (e) {
+        console.error('AI analyze/comment error:', e.message);
+        res.status(503).json({ success: false, message: 'AI service unavailable' });
+    }
+});
+
+// ── GET /api/ai/dashboard-sentiment ───────────────────────────────────────────
+// Called by the admin dashboard to get platform-wide sentiment + toxicity stats
+// Fetches the last N comments from Neo4j, sends them to the AI service
+app.get('/api/ai/dashboard-sentiment', async (req, res) => {
+    //const limit  = parseInt(req.query.limit) || 200;
+    const limit = Math.floor(
+      Number(req.query.limit || 200)
+    );
+    const session = driver.session();
+
+    console.log(
+      'dashboard limit:',
+      limit,
+      typeof limit
+    );
+
+    try {
+        // 1. Pull recent comment texts from Neo4j
+        const result = await session.run(`
+            MATCH (c:Comment)
+            WHERE c.content IS NOT NULL AND c.content <> ''
+            RETURN c.id AS id, c.content AS content
+            ORDER BY c.createdAt DESC
+            LIMIT 200
+        `, { limit });
+
+        if (result.records.length === 0) {
+            return res.json({
+                success:  true,
+                total:    0,
+                sentiment: { positive: 0, neutral: 0, negative: 0, total: 0,
+                             avg_scores: { positive: 0, neutral: 0, negative: 0 },
+                             negativity_breakdown: { low: 0, moderate: 0, high: 0, extreme: 0 } },
+                toxicity:  { total: 0, toxic_count: 0, clean_count: 0, toxic_rate: 0,
+                             avg_toxic_score: 0, degree_breakdown: { low: 0, moderate: 0, high: 0, extreme: 0 },
+                             severe_flag_count: 0, category_counts: {} },
+                top_toxic_categories: [],
+            });
+        }
+
+        // 2. Send to Python AI service
+        const texts = result.records.map(r => r.get('content'));
+        const aiResult = await callAI('/analyze/dashboard-summary', { texts });
+
+        res.json(aiResult);
+
+    } catch (e) {
+        console.error('AI dashboard-sentiment error:', e.message);
+        res.status(503).json({ success: false, message: 'AI service unavailable', error: e.message });
+    } finally {
+        await session.close();
+    }
+});
+
+// ── GET /api/ai/comments-analysis ────────────────────────────────────────────
+// Detailed per-comment analysis (used by moderator panel)
+app.get('/api/ai/comments-analysis', async (req, res) => {
+    //const limit  = parseInt(req.query.limit) || 100;
+    const limit = Math.floor(
+      Number(req.query.limit || 100)
+    );
+    const session = driver.session();
+
+    try {
+        const result = await session.run(`
+            MATCH (u:User)-[:OWNS_COMMENT]->(c:Comment)
+            WHERE c.content IS NOT NULL AND c.content <> ''
+            RETURN c.id AS id, c.content AS content, u.username AS author
+            ORDER BY c.createdAt DESC
+            LIMIT $limit
+        `, { limit });
+
+        if (result.records.length === 0) {
+            return res.json({ success: true, per_comment: [], aggregate: {} });
+        }
+
+        const comments = result.records.map(r => ({
+            id:     r.get('id'),
+            text:   r.get('content'),
+            author: r.get('author'),
+        }));
+
+        // Send id + text to AI service
+        const aiResult = await callAI('/analyze/batch/comments', {
+            comments: comments.map(c => ({ id: c.id, text: c.text })),
+        });
+
+        // Merge author info back into per_comment
+        const authorMap = Object.fromEntries(comments.map(c => [c.id, c.author]));
+        const enriched = aiResult.per_comment.map(item => ({
+            ...item,
+            author: authorMap[item.id] ?? 'unknown',
+        }));
+
+        res.json({ ...aiResult, per_comment: enriched });
+
+    } catch (e) {
+        console.error('AI comments-analysis error:', e.message);
+        res.status(503).json({ success: false, message: 'AI service unavailable' });
+    } finally {
+        await session.close();
+    }
+});
+
+// ── POST /api/ai/analyze/post-comment ─────────────────────────────────────────
+// Hook: analyse & store AI flags when a new comment is saved
+// Call this from inside the POST /api/posts/comment handler after CREATE
+async function analyzeAndStoreComment(commentId, content) {
+    try {
+        const aiResult = await callAI('/analyze/full', { text: content });
+        const session  = driver.session();
+
+        // Store AI results as properties on the Comment node
+        await session.run(`
+            MATCH (c:Comment {id: $commentId})
+            SET c.ai_sentiment        = $sentiment,
+                c.ai_sentiment_score  = $sentimentScore,
+                c.ai_toxic_score      = $toxicScore,
+                c.ai_is_toxic         = $isToxic,
+                c.ai_degree           = $degree,
+                c.ai_analyzed         = true
+        `, {
+            commentId,
+            sentiment:      aiResult.result?.sentiment?.label      ?? 'neutral',
+            sentimentScore: aiResult.result?.sentiment?.confidence ?? 0,
+            toxicScore:     aiResult.result?.toxicity?.toxic_score  ?? 0,
+            isToxic:        aiResult.result?.toxicity?.is_toxic     ?? false,
+            degree:         aiResult.result?.toxicity?.degree       ?? 'low',
+        });
+
+        await session.close();
+        console.log(`✅ AI flags stored for comment ${commentId}`);
+    } catch (e) {
+        // Non-blocking: AI failure should not break comment creation
+        console.warn(`⚠️ AI analysis skipped for comment ${commentId}: ${e.message}`);
+    }
+}
+
+// ── GET /api/ai/health ────────────────────────────────────────────────────────
+app.get('/api/ai/health', async (req, res) => {
+    try {
+        const r = await fetch(`${AI_SERVICE_URL}/health`);
+        const json = await r.json();
+        res.json({ bridge: 'ok', ai_service: json });
+    } catch (e) {
+        res.status(503).json({ bridge: 'ok', ai_service: 'unreachable' });
+    }
+});
 
 
 

@@ -5,6 +5,7 @@ Labels : LABEL_0 = Negative | LABEL_1 = Neutral | LABEL_2 = Positive
 
 from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification
 from functools import lru_cache
+import torch
 import logging
 
 logger = logging.getLogger(__name__)
@@ -42,7 +43,8 @@ def _get_pipeline():
         "sentiment-analysis",
         model=model,
         tokenizer=tokenizer,
-        top_k=None,          # return all scores
+        top_k=None,
+        device="cpu",     # explicit CPU — no CUDA needed
         truncation=True,
         max_length=512,
     )
