@@ -54,11 +54,18 @@ class GlassButton extends StatelessWidget {
               child: Container(
                 padding: padding ?? const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
                 decoration: BoxDecoration(
-                  color: buttonColor,
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      buttonColor.withOpacity(0.3),
+                      buttonColor.withOpacity(0.1),
+                    ],
+                  ),
                   borderRadius: radius,
                   border: Border.all(
-                    color: AppTheme.glassBorder,
-                    width: 1,
+                    color: Colors.white.withOpacity(0.2),
+                    width: 1.2,
                   ),
                 ),
                 alignment: Alignment.center,

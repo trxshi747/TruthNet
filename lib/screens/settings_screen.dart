@@ -157,8 +157,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onTap: () => _showEditField("UPDATE_EMAIL", user?.email ?? "", (val) async {
                    final success = await ApiService.updateEmail(user!.id, val);
                    if (success) {
-                     // Note: updateLocalEmail doesn't exist, we'll refactor this if needed.
-                     // For now, the UI will update on next fetch.
+                     authProvider.updateLocalEmail(val);
                      _showFeedback("LINK_ESTABLISHED");
                    }
                 }),

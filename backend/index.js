@@ -316,16 +316,35 @@ app.get('/api/feed', async (req, res) => {
 });
 
 app.get('/api/users/search', async (req, res) => {
-    const { query } = req.query;
+    const { query, excludeId } = req.query;
     const session = driver.session();
     try {
         const result = await session.run(
             `MATCH (u:User)
-             WHERE toLower(u.username) CONTAINS toLower($query)
+             WHERE toLower(u.username) CONTAINS toLower($query) 
+               AND u.id <> $excludeId
              RETURN u.username as name, u.id as id LIMIT 5`,
-            { query: query || "" }
+            { query: query || "", excludeId: excludeId || "" }
         );
         res.json(result.records.map(r => ({ name: r.get('name'), id: r.get('id') })));
+    } catch (e) { res.status(500).json([]); }
+    finally { await session.close(); }
+});
+
+app.get('/api/posts/search', async (req, res) => {
+    const { query, excludeId } = req.query;
+    const session = driver.session();
+    try {
+        const result = await session.run(
+            `MATCH (u:User)-[:OWNS_POST]->(p:Post)
+             WHERE toLower(coalesce(p.content, '')) CONTAINS toLower($query) 
+               AND u.id <> $excludeId
+               AND (p.isDeleted IS NULL OR p.isDeleted = false)
+               AND p.visibility = 'public'
+             RETURN u.username as author, u.id as authorId, p as post LIMIT 10`,
+            { query: query || "", excludeId: excludeId || "" }
+        );
+        res.json(result.records.map(r => ({ author: r.get('author'), authorId: r.get('authorId'), ...r.get('post').properties })));
     } catch (e) { res.status(500).json([]); }
     finally { await session.close(); }
 });
@@ -389,6 +408,74 @@ app.post('/api/posts/save', async (req, res) => {
             res.json({ success: true, action: 'saved' });
         }
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+    finally { await session.close(); }
+});
+
+// --- MESSAGES ---
+
+app.post('/api/messages', async (req, res) => {
+    const { senderId, receiverId, content } = req.body;
+    const session = driver.session();
+    try {
+        const result = await session.run(
+            `MATCH (sender:User {id: $senderId}), (receiver:User {id: $receiverId})
+             CREATE (m:Message {id: randomUUID(), content: $content, createdAt: timestamp()})
+             CREATE (sender)-[:SENT]->(m)-[:TO]->(receiver)
+             RETURN m`,
+            { senderId, receiverId, content }
+        );
+        res.json({ success: true, message: result.records[0].get('m').properties });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+    finally { await session.close(); }
+});
+
+app.get('/api/messages/history/:userId/:otherId', async (req, res) => {
+    const { userId, otherId } = req.params;
+    const session = driver.session();
+    try {
+        const result = await session.run(
+            `MATCH (sender:User)-[:SENT]->(m:Message)-[:TO]->(receiver:User)
+             WHERE (sender.id = $userId AND receiver.id = $otherId)
+                OR (sender.id = $otherId AND receiver.id = $userId)
+             RETURN m.id as id, m.content as content, m.createdAt as createdAt, sender.id as senderId
+             ORDER BY m.createdAt ASC`,
+            { userId, otherId }
+        );
+        res.json(result.records.map(r => ({
+            id: r.get('id'), content: r.get('content'), createdAt: r.get('createdAt').toNumber(), senderId: r.get('senderId')
+        })));
+    } catch (e) { res.status(500).json([]); }
+    finally { await session.close(); }
+});
+
+app.get('/api/messages/conversations/:userId', async (req, res) => {
+    const { userId } = req.params;
+    const session = driver.session();
+    try {
+        const result = await session.run(
+            `MATCH (u:User {id: $userId})
+             MATCH (u)-[:SENT]->(m:Message)-[:TO]->(other:User)
+             WITH other, m ORDER BY m.createdAt DESC
+             WITH other, collect(m)[0] as lastMsg
+             RETURN other.id as id, other.username as username, lastMsg.content as lastMessage, lastMsg.createdAt as lastMessageAt
+             UNION
+             MATCH (u:User {id: $userId})
+             MATCH (other:User)-[:SENT]->(m:Message)-[:TO]->(u)
+             WITH other, m ORDER BY m.createdAt DESC
+             WITH other, collect(m)[0] as lastMsg
+             RETURN other.id as id, other.username as username, lastMsg.content as lastMessage, lastMsg.createdAt as lastMessageAt`,
+            { userId }
+        );
+        const convos = {};
+        result.records.forEach(r => {
+            const id = r.get('id');
+            const time = r.get('lastMessageAt').toNumber();
+            if (!convos[id] || convos[id].lastMessageAt < time) {
+                convos[id] = { id, username: r.get('username'), lastMessage: r.get('lastMessage'), lastMessageAt: time };
+            }
+        });
+        res.json(Object.values(convos).sort((a,b) => b.lastMessageAt - a.lastMessageAt));
+    } catch (e) { res.status(500).json([]); }
     finally { await session.close(); }
 });
 

@@ -291,9 +291,43 @@ class ApiService {
     } catch (e) { return false; }
   }
 
-  static Future<List<dynamic>> searchUsers(String query) async {
+  static Future<List<dynamic>> searchUsers(String query, [String excludeId = ""]) async {
     try {
-      final response = await http.get(Uri.parse('$baseUrl/users/search?query=$query'));
+      final response = await http.get(Uri.parse('$baseUrl/users/search?query=$query&excludeId=$excludeId'));
+      return jsonDecode(response.body);
+    } catch (e) { return []; }
+  }
+
+  static Future<List<dynamic>> searchPosts(String query, [String excludeId = ""]) async {
+    try {
+      final response = await http.get(Uri.parse('$baseUrl/posts/search?query=$query&excludeId=$excludeId'));
+      return jsonDecode(response.body);
+    } catch (e) { return []; }
+  }
+
+  // --- MESSAGES ---
+
+  static Future<bool> sendMessage(String senderId, String receiverId, String content) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/messages'),
+        body: jsonEncode({'senderId': senderId, 'receiverId': receiverId, 'content': content}),
+        headers: {'Content-Type': 'application/json'},
+      );
+      return jsonDecode(response.body)['success'] ?? false;
+    } catch (e) { return false; }
+  }
+
+  static Future<List<dynamic>> getChatHistory(String userId, String otherId) async {
+    try {
+      final response = await http.get(Uri.parse('$baseUrl/messages/history/$userId/$otherId'));
+      return jsonDecode(response.body);
+    } catch (e) { return []; }
+  }
+
+  static Future<List<dynamic>> getConversations(String userId) async {
+    try {
+      final response = await http.get(Uri.parse('$baseUrl/messages/conversations/$userId'));
       return jsonDecode(response.body);
     } catch (e) { return []; }
   }

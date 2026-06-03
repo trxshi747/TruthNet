@@ -6,6 +6,9 @@ import 'package:model2/widgets/custom_floating_nav_bar.dart';
 import 'package:model2/screens/home_screen.dart';
 import 'package:model2/screens/message_screen.dart';
 import 'package:model2/screens/profile_screen.dart';
+import 'package:model2/screens/moderator_screen.dart';
+import 'package:model2/screens/admin_screen.dart';
+import 'package:model2/screens/search_screen.dart';
 
 class MainLayout extends StatefulWidget {
   const MainLayout({super.key});
@@ -43,8 +46,8 @@ class _MainLayoutState extends State<MainLayout> {
     final theme = Theme.of(context);
 
     final List<Widget> screens = [
-      HomeScreen(),
-      Center(child: Text('Searching...', style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.secondary))),
+      FeedScreen(),
+      const SearchScreen(),
     ];
     
     if (role != UserRole.guest) {
@@ -52,10 +55,10 @@ class _MainLayoutState extends State<MainLayout> {
       screens.add(ProfileScreen(key: profileKey));
     }
     if (role == UserRole.moderator || role == UserRole.admin) {
-      screens.add(const Center(child: Text('Moderator')));
+      screens.add(ModeratorScreen());
     }
     if (role == UserRole.admin) {
-      screens.add(const Center(child: Text('Admin')));
+      screens.add(AdminScreen());
     }
 
     return Scaffold(
@@ -63,7 +66,7 @@ class _MainLayoutState extends State<MainLayout> {
       body: Stack(
         children: [
           // Layer 1: Dynamic Background
-          const DynamicBackground(child: null,),
+          const DynamicBackground(child: SizedBox.shrink()),
           
           // Layer 2: Screens
           Positioned.fill(

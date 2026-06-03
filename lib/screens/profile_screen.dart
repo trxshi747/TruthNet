@@ -18,7 +18,8 @@ import 'package:model2/widgets/video_player_widget.dart'; // Duplicate but check
 import 'package:model2/core/theme/app_theme.dart';
 
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({Key? key}) : super(key: key);
+  final String? targetUserId;
+  const ProfileScreen({Key? key, this.targetUserId}) : super(key: key);
 
   @override
   ProfileScreenState createState() => ProfileScreenState();
@@ -41,10 +42,13 @@ class ProfileScreenState extends State<ProfileScreen> {
     if (!mounted) return;
     setState(() => _isLoading = true);
     final auth = Provider.of<AuthProvider>(context, listen: false);
-    if (auth.user != null) {
-      final profile = await ApiService.getProfile(auth.user!.id);
-      final posts = await ApiService.getUserPosts(auth.user!.id);
-      final archive = await ApiService.getArchivePosts(auth.user!.id);
+    final userIdToFetch = widget.targetUserId ?? auth.user?.id;
+    final isOwner = widget.targetUserId == null || widget.targetUserId == auth.user?.id;
+    
+    if (userIdToFetch != null) {
+      final profile = await ApiService.getProfile(userIdToFetch);
+      final posts = await ApiService.getUserPosts(userIdToFetch);
+      final archive = isOwner ? await ApiService.getArchivePosts(userIdToFetch) : [];
 
       if (!mounted) return;
       setState(() {
@@ -218,34 +222,50 @@ class ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) return const Scaffold(body: DynamicBackground(child: Center(child: CircularProgressIndicator(color: AppTheme.peach))));
+    if (_isLoading) {
+      return widget.targetUserId != null 
+        ? const Scaffold(body: DynamicBackground(child: Center(child: CircularProgressIndicator(color: AppTheme.peach))))
+        : const Center(child: CircularProgressIndicator(color: AppTheme.peach));
+    }
 
-    return Scaffold(
-      extendBodyBehindAppBar: true,
-      appBar: AppBar(
-        title: null,
-        automaticallyImplyLeading: false,
-      ),
-      body: DynamicBackground(
-        child: SafeArea(
-          child: Column(
-            children: [
-              const SizedBox(height: 10),
-              _buildProfileHeader().animate().fade(delay: 100.ms).slideY(begin: 0.1),
-              const SizedBox(height: 30),
-              _buildStatsRow().animate().fade(delay: 200.ms).scale(begin: const Offset(0.9, 0.9)),
-              const SizedBox(height: 30),
-              _buildTabSwitcher().animate().fade(delay: 300.ms),
-              Expanded(child: _buildContentList().animate().fade(delay: 400.ms)),
-            ],
-          ),
-        ),
+    final content = SafeArea(
+      child: Column(
+        children: [
+          const SizedBox(height: 10),
+          _buildProfileHeader().animate().fade(delay: 100.ms).slideY(begin: 0.1),
+          const SizedBox(height: 30),
+          _buildStatsRow().animate().fade(delay: 200.ms).scale(begin: const Offset(0.9, 0.9)),
+          const SizedBox(height: 30),
+          _buildTabSwitcher().animate().fade(delay: 300.ms),
+          Expanded(child: _buildContentList().animate().fade(delay: 400.ms)),
+        ],
       ),
     );
+
+    if (widget.targetUserId != null) {
+      return Scaffold(
+        extendBodyBehindAppBar: true,
+        appBar: AppBar(
+          title: null,
+          automaticallyImplyLeading: false,
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_rounded, color: AppTheme.peach),
+            onPressed: () => Navigator.pop(context),
+          ),
+        ),
+        body: DynamicBackground(child: content),
+      );
+    }
+
+    return content;
   }
 
   Widget _buildProfileHeader() {
     String username = _profileData?['username'] ?? 'user';
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    final isOwner = widget.targetUserId == null || widget.targetUserId == auth.user?.id;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 25.0),
@@ -279,39 +299,41 @@ class ProfileScreenState extends State<ProfileScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text("@$username", style: GoogleFonts.righteous(fontSize: 22, color: AppTheme.peach)),     
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.05),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: Colors.white10)
+                    if (isOwner)
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.05),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.white10)
+                        ),
+                        child: IconButton(
+                          icon: const Icon(Icons.settings_outlined, color: AppTheme.peach, size: 20),
+                          onPressed: () {
+                            Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsScreen()));
+                          },
+                          padding: const EdgeInsets.all(8),
+                          constraints: const BoxConstraints(),
+                        ),
                       ),
-                      child: IconButton(
-                        icon: const Icon(Icons.settings_outlined, color: AppTheme.peach, size: 20),
-                        onPressed: () {
-                          Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsScreen()));
-                        },
-                        padding: const EdgeInsets.all(8),
-                        constraints: const BoxConstraints(),
-                      ),
-                    ),
                   ],
                 ),
                 Text("${_profileData?['firstName'] ?? ''} ${_profileData?['lastName'] ?? ''}".trim(), style: GoogleFonts.spaceMono(color: AppTheme.coral.withOpacity(0.7), fontSize: 11)),
                 const SizedBox(height: 8),
                 Text(_profileData?['bio'] ?? "NO_DATA_AVAILABLE", style: GoogleFonts.spaceMono(color: Colors.white70, fontSize: 11)),
                 const SizedBox(height: 12),
-                InkWell(
-                  onTap: _showEditProfile,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: AppTheme.peach.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: AppTheme.peach.withOpacity(0.3)),
+                if (isOwner)
+                  InkWell(
+                    onTap: _showEditProfile,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: AppTheme.peach.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppTheme.peach.withOpacity(0.3)),
+                      ),
+                      child: Text("EDIT_IDENTITY", style: GoogleFonts.spaceMono(fontSize: 10, color: AppTheme.peach, fontWeight: FontWeight.bold)),
                     ),
-                    child: Text("EDIT_IDENTITY", style: GoogleFonts.spaceMono(fontSize: 10, color: AppTheme.peach, fontWeight: FontWeight.bold)),
                   ),
-                ),
               ],
             ),
           ),
@@ -352,13 +374,18 @@ class ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildTabSwitcher() {
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    final isOwner = widget.targetUserId == null || widget.targetUserId == auth.user?.id;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 25.0),
       child: Row(
         children: [
           _buildTab("POSTS", 0),
-          const SizedBox(width: 25),
-          _buildTab("ARCHIVE", 1),
+          if (isOwner) ...[
+            const SizedBox(width: 25),
+            _buildTab("ARCHIVE", 1),
+          ],
         ],
       ),
     );
