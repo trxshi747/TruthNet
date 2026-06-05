@@ -1,4 +1,6 @@
 const express = require('express');
+const http = require('http');
+const { Server } = require("socket.io");
 const neo4j = require('neo4j-driver');
 require('dotenv').config();
 const bodyParser = require('body-parser');
@@ -9,6 +11,82 @@ const path = require('path');
 const fs = require('fs');
 
 const app = express();
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST", "PUT", "DELETE"]
+  }
+});
+
+// Socket mapping
+const userSockets = new Map(); // userId -> socketId
+
+io.on('connection', (socket) => {
+    console.log('A user connected:', socket.id);
+
+    socket.on('register', (userId) => {
+        userSockets.set(userId, socket.id);
+        console.log(`User ${userId} registered to socket ${socket.id}`);
+    });
+
+    socket.on('disconnect', () => {
+        console.log('User disconnected:', socket.id);
+        for (let [userId, sockId] of userSockets.entries()) {
+            if (sockId === socket.id) {
+                userSockets.delete(userId);
+                break;
+            }
+        }
+    });
+});
+
+async function sendNotification(session, type, actorId, targetId, postId = null, commentId = null, text = "") {
+    if (actorId === targetId) return; // Don't notify self
+
+    try {
+        const notifId = require('crypto').randomUUID();
+        const result = await session.run(`
+            MATCH (target:User {id: $targetId})
+            MATCH (actor:User {id: $actorId})
+            OPTIONAL MATCH (actor)-[:HAS_PROFILE]->(p:Profile)
+            CREATE (n:Notification {
+                id: $notifId,
+                type: $type,
+                text: $text,
+                postId: $postId,
+                commentId: $commentId,
+                isRead: false,
+                createdAt: timestamp()
+            })
+            CREATE (n)-[:NOTIFIES]->(target)
+            CREATE (actor)-[:INITIATED_NOTIF]->(n)
+            RETURN n, actor.username as actorUsername, p.avatar as actorAvatar, actor.id as actorId
+        `, { targetId, actorId, notifId, type, text, postId, commentId });
+        
+        if (result.records.length > 0) {
+            const notif = result.records[0].get('n').properties;
+            const actorUsername = result.records[0].get('actorUsername');
+            const actorAvatar = result.records[0].get('actorAvatar');
+            const resultActorId = result.records[0].get('actorId');
+            const payload = { 
+                ...notif, 
+                createdAt: notif.createdAt.toNumber(), // Convert Neo4j integer to standard JS number
+                actorUsername, 
+                actorAvatar,
+                actorId: resultActorId
+            };
+            
+            const targetSocketId = userSockets.get(targetId);
+            if (targetSocketId) {
+                io.to(targetSocketId).emit('new_notification', payload);
+            }
+        }
+    } catch (e) {
+        console.error("Error creating notification:", e);
+    }
+}
+
 app.use(cors());
 app.use(bodyParser.json());
 app.use('/uploads', express.static('uploads'));
@@ -151,9 +229,10 @@ app.post('/api/auth/register', async (req, res) => {
     });
 
   } catch (e) {
-    res.status(500).json({ success: false, message: e.message });
+      console.log("Error in /api/users/follow:", e);
+      res.status(500).json({ success: false, message: e.message });
   } finally {
-    await session.close();
+      await session.close();
   }
 });
 
@@ -321,9 +400,17 @@ app.get('/api/users/search', async (req, res) => {
     try {
         const result = await session.run(
             `MATCH (u:User)
-             WHERE toLower(u.username) CONTAINS toLower($query) 
+             WHERE toLower(u.username) CONTAINS toLower($query)
                AND u.id <> $excludeId
-             RETURN u.username as name, u.id as id LIMIT 5`,
+             OPTIONAL MATCH (me:User {id: $excludeId})-[r1:FOLLOWS]->(u)
+             OPTIONAL MATCH (u)-[r2:FOLLOWS]->(me)
+             WITH u,
+                  CASE WHEN r1 IS NOT NULL AND r2 IS NOT NULL THEN 3
+                       WHEN r1 IS NOT NULL THEN 2
+                       WHEN r2 IS NOT NULL THEN 1
+                       ELSE 0 END AS priority
+             ORDER BY priority DESC, u.username ASC
+             RETURN u.username as name, u.id as id LIMIT 10`,
             { query: query || "", excludeId: excludeId || "" }
         );
         res.json(result.records.map(r => ({ name: r.get('name'), id: r.get('id') })));
@@ -349,6 +436,36 @@ app.get('/api/posts/search', async (req, res) => {
     finally { await session.close(); }
 });
 
+app.post('/api/users/follow', async (req, res) => {
+    const { userId, targetId } = req.body;
+    const session = driver.session();
+    try {
+        const check = await session.run('MATCH (a:User {id: $userId})-[r:FOLLOWS]->(b:User {id: $targetId}) RETURN r', { userId, targetId });
+        if (check.records.length > 0) {
+            // Unfollow
+            await session.run('MATCH (a:User {id: $userId})-[r:FOLLOWS]->(b:User {id: $targetId}) DELETE r', { userId, targetId });
+            await session.run('MATCH (p1:Profile)<-[:HAS_PROFILE]-(:User {id: $userId}) SET p1.followingCount = p1.followingCount - 1', { userId });
+            await session.run('MATCH (p2:Profile)<-[:HAS_PROFILE]-(:User {id: $targetId}) SET p2.followerCount = p2.followerCount - 1', { targetId });
+            res.json({ success: true, action: 'unfollowed' });
+        } else {
+            // Follow
+            await session.run('MATCH (a:User {id: $userId}), (b:User {id: $targetId}) CREATE (a)-[:FOLLOWS]->(b)', { userId, targetId });
+            await session.run('MATCH (p1:Profile)<-[:HAS_PROFILE]-(:User {id: $userId}) SET p1.followingCount = p1.followingCount + 1', { userId });
+            await session.run('MATCH (p2:Profile)<-[:HAS_PROFILE]-(:User {id: $targetId}) SET p2.followerCount = p2.followerCount + 1', { targetId });
+            
+            // Send notification
+            await sendNotification(session, 'follow', userId, targetId, null, null, "started following you");
+            
+            res.json({ success: true, action: 'followed' });
+        }
+    } catch (e) {
+        console.log("Error in /api/users/follow:", e);
+        res.status(500).json({ success: false, message: e.message });
+    } finally {
+        await session.close();
+    }
+});
+
 
 app.post('/api/posts/like', async (req, res) => {
     const { userId, postId } = req.body;
@@ -366,9 +483,9 @@ app.post('/api/posts/like', async (req, res) => {
             );
             res.json({ success: true, action: 'unliked' });
         } else {
-            await session.run(`
+            const createResult = await session.run(`
                 MATCH (u:User {id: $userId})
-                MATCH (p:Post {id: $postId})
+                MATCH (p:Post {id: $postId})<-[:OWNS_POST]-(owner:User)
                 CREATE (r:Reaction {
                     id: randomUUID(),
                     type: 'LIKE',
@@ -378,7 +495,13 @@ app.post('/api/posts/like', async (req, res) => {
                 CREATE (u)-[:OWNS_REACTION]->(r)
                 CREATE (r)-[:TARGETS]->(p)
                 CREATE (r)-[:HAS_REACTION]->(p)
+                RETURN owner.id as ownerId
             `, { userId, postId });
+            
+            if (createResult.records.length > 0) {
+                const ownerId = createResult.records[0].get('ownerId');
+                await sendNotification(session, 'like_post', userId, ownerId, postId, null, "liked your post");
+            }
             res.json({ success: true, action: 'liked' });
         }
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
@@ -516,6 +639,7 @@ app.get('/api/admin/dashboard', async (req, res) => {
 
 app.get('/api/users/:userId/profile', async (req, res) => {
     const { userId } = req.params;
+    const { currentUserId } = req.query;
     const session = driver.session();
     try {
         // Check if user is an admin or moderator first
@@ -536,13 +660,12 @@ app.get('/api/users/:userId/profile', async (req, res) => {
         const profileResult = await session.run(
             `MATCH (u:User {id: $userId})-[:HAS_PROFILE]->(profile:Profile)
              OPTIONAL MATCH (u)-[:OWNS_POST]->(p:Post) WHERE p.isDeleted IS NULL OR p.isDeleted = false
-             OPTIONAL MATCH (profile)-[:HAS_FOLLOWING]->(following:Following)
-             OPTIONAL MATCH (profile)-[:HAS_FOLLOWER]->(follower:Follower)
              RETURN u, profile,
                     count(DISTINCT p) as postCount,
-                    count(DISTINCT following) as followingCount,
-                    count(DISTINCT follower) as followerCount`,
-            { userId }
+                    profile.followerCount as followerCount,
+                    profile.followingCount as followingCount,
+                    EXISTS((:User {id: $currentUserId})-[:FOLLOWS]->(u)) as isFollowing`,
+            { userId, currentUserId: currentUserId || "" }
         );
         if (profileResult.records.length > 0) {
             const user = profileResult.records[0].get('u').properties;
@@ -553,6 +676,7 @@ app.get('/api/users/:userId/profile', async (req, res) => {
                 postCount: profileResult.records[0].get('postCount').toInt(),
                 followingCount: profileResult.records[0].get('followingCount').toInt(),
                 followerCount: profileResult.records[0].get('followerCount').toInt(),
+                isFollowing: profileResult.records[0].get('isFollowing'),
                 hasProfile: true
             });
         } else {
@@ -723,6 +847,41 @@ app.delete('/api/posts/:postId/permanent', async (req, res) => {
 // --- INTERACTIONS ---
 
 
+app.get('/api/posts/:postId', async (req, res) => {
+    const { postId } = req.params;
+    const userId = req.query.userId;
+    const session = driver.session();
+    try {
+        const result = await session.run(
+            `MATCH (u:User)-[:OWNS_POST]->(p:Post {id: $postId})
+             WHERE (p.isDeleted IS NULL OR p.isDeleted = false)
+             RETURN u.username as author, u.id as authorId, p as post,
+                    COUNT { (p)<-[:HAS_REACTION]-() } as likeCount,
+                    COUNT { (p)<-[:HAS_COMMENT]-() } as commentCount,
+                    COUNT { (p)<-[:SHARED]-() } as shareCount,
+                    EXISTS { (p)<-[:SAVED]-(:User {id: $userId}) } as isSaved,
+                    EXISTS { (p)<-[:HAS_REACTION]-(r:Reaction {targetType: 'Post'})<-[:OWNS_REACTION]-(:User {id: $userId}) } as isLiked`,
+            { postId, userId: userId || "" }
+        );
+        if (result.records.length > 0) {
+            const r = result.records[0];
+            res.json({
+                author: r.get('author'),
+                authorId: r.get('authorId'),
+                ...r.get('post').properties,
+                likeCount: r.get('likeCount').toInt(),
+                commentCount: r.get('commentCount').toInt(),
+                shareCount: r.get('shareCount').toInt(),
+                isSaved: r.get('isSaved'),
+                isLiked: r.get('isLiked')
+            });
+        } else {
+            res.status(404).json({ message: "POST_NOT_FOUND" });
+        }
+    } catch (e) { res.status(500).json({ message: e.message }); }
+    finally { await session.close(); }
+});
+
 app.get('/api/posts/:postId/comments', async (req, res) => {
     const { postId } = req.params;
     const session = driver.session();
@@ -764,9 +923,10 @@ app.post('/api/comments/:commentId/like', async (req, res) => {
             );
             res.json({ success: true, action: 'unliked' });
         } else {
-            await session.run(`
+            const createResult = await session.run(`
                 MATCH (u:User {id: $userId})
-                MATCH (c:Comment {id: $commentId})
+                MATCH (c:Comment {id: $commentId})<-[:OWNS_COMMENT]-(owner:User)
+                MATCH (c)-[:TARGETS*1..]->(p:Post)
                 CREATE (r:Reaction {
                     id: randomUUID(),
                     type: 'LIKE',
@@ -776,7 +936,14 @@ app.post('/api/comments/:commentId/like', async (req, res) => {
                 CREATE (u)-[:OWNS_REACTION]->(r)
                 CREATE (r)-[:TARGETS]->(c)
                 CREATE (r)-[:HAS_REACTION]->(c)
+                RETURN owner.id as ownerId, p.id as postId
             `, { userId, commentId });
+            
+            if (createResult.records.length > 0) {
+                const ownerId = createResult.records[0].get('ownerId');
+                const postId = createResult.records[0].get('postId');
+                await sendNotification(session, 'like_comment', userId, ownerId, postId, commentId, "liked your comment");
+            }
             res.json({ success: true, action: 'liked' });
         }
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
@@ -788,15 +955,21 @@ app.post('/api/posts/comment', async (req, res) => {
     const session = driver.session();
     try {
         const result = await session.run(
-            `MATCH (u:User {id: $userId}), (p:Post {id: $postId})
+            `MATCH (u:User {id: $userId}), (p:Post {id: $postId})<-[:OWNS_POST]-(owner:User)
              CREATE (c:Comment {id: randomUUID(), content: $content, createdAt: timestamp()})
              CREATE (u)-[:OWNS_COMMENT]->(c)
              CREATE (c)-[:TARGETS]->(p)
              CREATE (p)-[:HAS_COMMENT]->(c)
-             RETURN c`,
+             RETURN c, owner.id as ownerId`,
             { userId, postId, content }
         );
-        res.json({ success: true, comment: result.records[0].get('c').properties });
+        const comment = result.records[0].get('c').properties;
+        const ownerId = result.records[0].get('ownerId');
+        
+        await sendNotification(session, 'comment', userId, ownerId, postId, comment.id, "commented on your post");
+        analyzeAndStoreComment(comment.id, content); // fire and forget
+        
+        res.json({ success: true, comment });
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
     finally { await session.close(); }
 });
@@ -807,14 +980,24 @@ app.post('/api/comments/:commentId/reply', async (req, res) => {
     const session = driver.session();
     try {
         const result = await session.run(
-            `MATCH (u:User {id: $userId}), (target:Comment {id: $commentId})
+            `MATCH (u:User {id: $userId})
+             MATCH (target:Comment {id: $commentId})<-[:OWNS_COMMENT]-(owner:User)
+             MATCH (target)-[:TARGETS*1..]->(p:Post)
              CREATE (reply:Comment {id: randomUUID(), content: $content, createdAt: timestamp()})
              CREATE (u)-[:OWNS_COMMENT]->(reply)
              CREATE (reply)-[:REPLIED_TO]->(target)
-             RETURN reply`,
+             CREATE (reply)-[:TARGETS]->(p)
+             RETURN reply, owner.id as ownerId, p.id as postId`,
             { userId, commentId, content }
         );
-        res.json({ success: true, reply: result.records[0].get('reply').properties });
+        const reply = result.records[0].get('reply').properties;
+        const ownerId = result.records[0].get('ownerId');
+        const postId = result.records[0].get('postId');
+        
+        await sendNotification(session, 'reply', userId, ownerId, postId, reply.id, "replied to your comment");
+        analyzeAndStoreComment(reply.id, content); // fire and forget
+        
+        res.json({ success: true, reply });
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
     finally { await session.close(); }
 });
@@ -878,6 +1061,46 @@ app.delete('/api/comments/:commentId', async (req, res) => {
         } else {
             res.status(403).json({ success: false, message: "UNAUTHORIZED_OR_NOT_FOUND" });
         }
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+    finally { await session.close(); }
+});
+
+// --- NOTIFICATIONS ---
+
+app.get('/api/notifications/:userId', async (req, res) => {
+    const { userId } = req.params;
+    const session = driver.session();
+    try {
+        const result = await session.run(`
+            MATCH (n:Notification)-[:NOTIFIES]->(u:User {id: $userId})
+            MATCH (actor:User)-[:INITIATED_NOTIF]->(n)
+            OPTIONAL MATCH (actor)-[:HAS_PROFILE]->(p:Profile)
+            RETURN n.id as id, n.type as type, n.text as text, n.postId as postId, n.commentId as commentId, n.isRead as isRead, n.createdAt as createdAt, actor.username as actorUsername, p.avatar as actorAvatar, actor.id as actorId
+            ORDER BY n.createdAt DESC LIMIT 50
+        `, { userId });
+        
+        res.json(result.records.map(r => ({
+            id: r.get('id'),
+            type: r.get('type'),
+            text: r.get('text'),
+            postId: r.get('postId'),
+            commentId: r.get('commentId'),
+            isRead: r.get('isRead'),
+            createdAt: r.get('createdAt').toNumber(),
+            actorUsername: r.get('actorUsername'),
+            actorAvatar: r.get('actorAvatar'),
+            actorId: r.get('actorId')
+        })));
+    } catch (e) { res.status(500).json([]); }
+    finally { await session.close(); }
+});
+
+app.put('/api/notifications/:notifId/read', async (req, res) => {
+    const { notifId } = req.params;
+    const session = driver.session();
+    try {
+        await session.run(`MATCH (n:Notification {id: $notifId}) SET n.isRead = true`, { notifId });
+        res.json({ success: true });
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
     finally { await session.close(); }
 });
@@ -1768,4 +1991,4 @@ app.get('/api/ai/health', async (req, res) => {
 
 
 
-app.listen(3000, () => console.log('Backend listening on port 3000'));
+server.listen(3000, () => console.log('Backend listening on port 3000'));

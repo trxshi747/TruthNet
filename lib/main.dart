@@ -11,6 +11,7 @@ import 'package:model2/screens/message_screen.dart';
 import 'package:model2/screens/moderator_screen.dart';
 import 'package:model2/screens/admin_screen.dart';
 import 'package:model2/providers/auth_provider.dart';
+import 'package:model2/providers/notification_provider.dart';
 
 import 'package:model2/core/theme/app_theme.dart';
 
@@ -21,8 +22,11 @@ void main() {
 class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (context) => AuthProvider(),
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (context) => AuthProvider()),
+        ChangeNotifierProvider(create: (context) => NotificationProvider()),
+      ],
       child: MaterialApp(
         title: 'TruthNet',
         debugShowCheckedModeBanner: false,

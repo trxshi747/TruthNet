@@ -13,7 +13,40 @@ class MessageScreen extends StatefulWidget {
 
 class _MessageScreenState extends State<MessageScreen> {
   List<dynamic> _conversations = [];
+  List<dynamic> _searchResults = [];
   bool _isLoading = true;
+  bool _isSearching = false;
+  final TextEditingController _searchController = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _onSearchChanged(String query) async {
+    if (query.isEmpty) {
+      setState(() {
+        _isSearching = false;
+        _searchResults = [];
+      });
+      return;
+    }
+    
+    setState(() {
+      _isSearching = true;
+    });
+
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    if (auth.user != null) {
+      final results = await ApiService.searchUsers(query, auth.user!.id);
+      if (mounted) {
+        setState(() {
+          _searchResults = results;
+        });
+      }
+    }
+  }
 
   @override
   void initState() {
@@ -55,10 +88,70 @@ class _MessageScreenState extends State<MessageScreen> {
               ],
             ),
           ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20.0),
+            child: TextField(
+              controller: _searchController,
+              onChanged: _onSearchChanged,
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                hintText: "Search users...",
+                hintStyle: const TextStyle(color: Colors.white54),
+                prefixIcon: const Icon(Icons.search, color: Colors.white54),
+                filled: true,
+                fillColor: AppTheme.mediumPurple.withOpacity(0.5),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(15),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
           Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator(color: AppTheme.peach))
-                : _conversations.isEmpty
+            child: _isSearching
+                ? ListView.builder(
+                    padding: const EdgeInsets.only(bottom: 120),
+                    itemCount: _searchResults.length,
+                    itemBuilder: (context, index) {
+                      final user = _searchResults[index];
+                      final String username = user['name'] ?? "UNKNOWN";
+                      return Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: AppTheme.mediumPurple.withOpacity(0.5),
+                          borderRadius: BorderRadius.circular(15),
+                          border: Border.all(color: Colors.white10),
+                        ),
+                        child: ListTile(
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                          leading: CircleAvatar(
+                            backgroundColor: AppTheme.peach,
+                            child: Text(username[0].toUpperCase(), style: const TextStyle(color: AppTheme.darkPurple)),
+                          ),
+                          title: Text("@$username", style: GoogleFonts.spaceMono(color: Colors.white, fontWeight: FontWeight.bold)),
+                          trailing: const Icon(Icons.message_rounded, color: Colors.white24),
+                          onTap: () {
+                            _searchController.clear();
+                            setState(() {
+                              _isSearching = false;
+                              _searchResults = [];
+                            });
+                            Navigator.push(
+                              context, 
+                              MaterialPageRoute(builder: (context) => ChatScreen(
+                                otherUserId: user['id'], 
+                                otherUsername: username
+                              ))
+                            ).then((_) => _fetchConversations());
+                          },
+                        ),
+                      );
+                    },
+                  )
+                : _isLoading
+                    ? const Center(child: CircularProgressIndicator(color: AppTheme.peach))
+                    : _conversations.isEmpty
                     ? Center(child: Text("NO_COMMUNICATIONS_DETECTED", style: GoogleFonts.spaceMono(color: Colors.white24)))
                     : ListView.builder(
                         padding: const EdgeInsets.only(bottom: 120), // Avoid nav bar overlap

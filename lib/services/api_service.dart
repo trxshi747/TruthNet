@@ -38,6 +38,16 @@ class ApiService {
     } catch (e) { return {'success': false, 'message': e.toString()}; }
   }
 
+  static Future<Map<String, dynamic>?> getPost(String postId, String userId) async {
+    try {
+      final response = await http.get(Uri.parse('$baseUrl/posts/$postId?userId=$userId'));
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      }
+      return null;
+    } catch (e) { return null; }
+  }
+
   static Future<Map<String, dynamic>> createPost({
     required String userId,
     required String content,
@@ -113,11 +123,30 @@ class ApiService {
 
   // --- PROFILE ---
 
-  static Future<Map<String, dynamic>> getProfile(String userId) async {
+  static Future<Map<String, dynamic>> getProfile(String userId, String currentUserId) async {
     try {
-      final response = await http.get(Uri.parse('$baseUrl/users/$userId/profile'));
+      final response = await http.get(Uri.parse('$baseUrl/users/$userId/profile?currentUserId=$currentUserId'));
       return jsonDecode(response.body);
     } catch (e) { return {}; }
+  }
+
+  static Future<Map<String, dynamic>> followUser(String userId, String targetId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/users/follow'),
+        body: jsonEncode({'userId': userId, 'targetId': targetId}),
+        headers: {'Content-Type': 'application/json'},
+      );
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        print("ApiService.followUser failed: ${response.statusCode} ${response.body}");
+        return {'success': false, 'message': 'Server error'};
+      }
+    } catch (e) { 
+      print("ApiService.followUser exception: $e");
+      return {'success': false, 'message': 'Network error'}; 
+    }
   }
 
   static Future<bool> updateProfile(String userId, String firstName, String lastName, String bio, XFile? avatar) async {
@@ -617,5 +646,27 @@ class ApiService {
     }
   }
   */
+
+  // --- NOTIFICATIONS ---
+
+  static Future<List<dynamic>> getNotifications(String userId) async {
+    try {
+      final response = await http.get(Uri.parse('$baseUrl/notifications/$userId'));
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      }
+      return [];
+    } catch (e) { return []; }
+  }
+
+  static Future<bool> markNotificationRead(String notifId) async {
+    try {
+      final response = await http.put(Uri.parse('$baseUrl/notifications/$notifId/read'));
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body)['success'] ?? false;
+      }
+      return false;
+    } catch (e) { return false; }
+  }
 
 }

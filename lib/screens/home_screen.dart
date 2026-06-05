@@ -5,9 +5,11 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:model2/providers/auth_provider.dart';
+import 'package:model2/providers/notification_provider.dart';
 import 'package:model2/services/api_service.dart';
-import 'package:model2/widgets/dynamic_background.dart';
-import 'package:model2/widgets/custom_floating_nav_bar.dart';
+import 'package:model2/screens/profile_screen.dart';
+import 'package:model2/screens/post_screen.dart';
+import 'package:model2/screens/notifications_screen.dart';
 import 'package:model2/screens/profile_screen.dart';
 import 'package:model2/screens/message_screen.dart';
 import 'package:model2/screens/chat_screen.dart';
@@ -758,6 +760,48 @@ class _FeedScreenState extends State<FeedScreen> {
           ),
         ),
         actions: [
+          if (role != UserRole.guest)
+            Consumer<NotificationProvider>(
+              builder: (context, notifProvider, child) {
+                return Stack(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.notifications_rounded, color: AppTheme.peach),
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => const NotificationsScreen()),
+                        );
+                      },
+                    ),
+                    if (notifProvider.unreadCount > 0)
+                      Positioned(
+                        right: 8,
+                        top: 8,
+                        child: Container(
+                          padding: const EdgeInsets.all(2),
+                          decoration: BoxDecoration(
+                            color: AppTheme.coral,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          constraints: const BoxConstraints(
+                            minWidth: 16,
+                            minHeight: 16,
+                          ),
+                          child: Text(
+                            '${notifProvider.unreadCount}',
+                            style: GoogleFonts.spaceMono(
+                              color: Colors.white,
+                              fontSize: 10,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ),
+                  ],
+                );
+              },
+            ),
           IconButton(
             icon: const Icon(Icons.refresh_rounded, color: AppTheme.peach),
             onPressed: () => _fetchFeed(),

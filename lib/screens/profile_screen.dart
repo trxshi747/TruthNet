@@ -13,7 +13,6 @@ import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
 import 'package:model2/widgets/video_player_widget.dart';
-import 'package:model2/widgets/video_player_widget.dart'; // Duplicate but checking imports
 
 import 'package:model2/core/theme/app_theme.dart';
 
@@ -30,6 +29,7 @@ class ProfileScreenState extends State<ProfileScreen> {
   List<dynamic> _userPosts = [];
   List<dynamic> _archivePosts = [];
   bool _isLoading = true;
+  bool _isFollowing = false;
   int _currentTab = 0; // 0 for Posts, 1 for Archive
 
   @override
@@ -44,9 +44,9 @@ class ProfileScreenState extends State<ProfileScreen> {
     final auth = Provider.of<AuthProvider>(context, listen: false);
     final userIdToFetch = widget.targetUserId ?? auth.user?.id;
     final isOwner = widget.targetUserId == null || widget.targetUserId == auth.user?.id;
-    
+
     if (userIdToFetch != null) {
-      final profile = await ApiService.getProfile(userIdToFetch);
+      final profile = await ApiService.getProfile(userIdToFetch, auth.user?.id ?? '');
       final posts = await ApiService.getUserPosts(userIdToFetch);
       final archive = isOwner ? await ApiService.getArchivePosts(userIdToFetch) : [];
 
@@ -55,6 +55,7 @@ class ProfileScreenState extends State<ProfileScreen> {
         _profileData = profile;
         _userPosts = posts;
         _archivePosts = archive;
+        _isFollowing = profile['isFollowing'] ?? false;
         _isLoading = false;
       });
     }
@@ -76,7 +77,7 @@ class ProfileScreenState extends State<ProfileScreen> {
           TextButton(onPressed: () => Navigator.pop(context, false), child: Text("NO", style: GoogleFonts.spaceMono(color: Colors.white))),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: AppTheme.coral, foregroundColor: Colors.white),
-            onPressed: () => Navigator.pop(context, true), 
+            onPressed: () => Navigator.pop(context, true),
             child: Text("YES_ERASE", style: GoogleFonts.spaceMono(fontWeight: FontWeight.bold))
           ),
         ],
@@ -92,7 +93,7 @@ class ProfileScreenState extends State<ProfileScreen> {
             content: Text("NODE_PERMANENTLY_ERASED", style: GoogleFonts.spaceMono(fontWeight: FontWeight.bold, color: AppTheme.darkPurple)),
             backgroundColor: AppTheme.peach,
           )
-        );   
+        );
       }
     }
   }
@@ -115,103 +116,105 @@ class ProfileScreenState extends State<ProfileScreen> {
             child: Container(
               color: AppTheme.mediumPurple.withOpacity(0.85),
               padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, left: 25, right: 25, top: 15),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
-                  ),
-                  const SizedBox(height: 20),
-                  Text("CUSTOMIZE_IDENTITY", style: GoogleFonts.righteous(color: AppTheme.peach, fontSize: 20)),
-                  const SizedBox(height: 20),
-                  GestureDetector(
-                    onTap: () async {
-                      final picker = ImagePicker();
-                      final image = await picker.pickImage(source: ImageSource.gallery);
-                      if (image != null) setModalState(() => _newAvatar = image);
-                    },
-                    child: Container(
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(color: AppTheme.peach, width: 2),
-                        boxShadow: [BoxShadow(color: AppTheme.peach.withOpacity(0.2), blurRadius: 15)]
-                      ),
-                      child: CircleAvatar(
-                        radius: 40,
-                        backgroundColor: AppTheme.darkPurple,
-                        backgroundImage: _newAvatar != null
-                          ? (kIsWeb ? NetworkImage(_newAvatar!.path) : FileImage(File(_newAvatar!.path)) as ImageProvider)
-                          : (_profileData?['avatar'] != null ? NetworkImage("${ApiService.baseUrl.replaceFirst('/api', '')}${_profileData?['avatar']}") : null),
-                        child: _newAvatar == null && _profileData?['avatar'] == null ? const Icon(Icons.camera_alt, color: AppTheme.peach) : null,
-                      ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
                     ),
-                  ),
-                  const SizedBox(height: 20),
-                  TextField(
-                    controller: _firstNameController,
-                    style: GoogleFonts.spaceMono(color: Colors.white),
-                    decoration: InputDecoration(
-                      labelText: "FIRST_NAME",
-                      labelStyle: GoogleFonts.spaceMono(color: AppTheme.peach),
-                      enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.white10)),     
-                      focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: AppTheme.peach)),
-                    ),
-                  ),
-                  const SizedBox(height: 15),
-                  TextField(
-                    controller: _lastNameController,
-                    style: GoogleFonts.spaceMono(color: Colors.white),
-                    decoration: InputDecoration(
-                      labelText: "LAST_NAME",
-                      labelStyle: GoogleFonts.spaceMono(color: AppTheme.peach),
-                      enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.white10)),     
-                      focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: AppTheme.peach)),
-                    ),
-                  ),
-                  const SizedBox(height: 15),
-                  TextField(
-                    controller: _bioController,
-                    style: GoogleFonts.spaceMono(color: Colors.white),
-                    maxLines: 3,
-                    decoration: InputDecoration(
-                      labelText: "BIOGRAPHY_DATA",
-                      labelStyle: GoogleFonts.spaceMono(color: AppTheme.peach),
-                      enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.white10)),     
-                      focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: AppTheme.peach)),
-                    ),
-                  ),
-                  const SizedBox(height: 30),
-                  Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(15),
-                      boxShadow: [BoxShadow(color: AppTheme.peach.withOpacity(0.3), blurRadius: 15)],
-                    ),
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.peach,
-                        minimumSize: const Size(double.infinity, 50),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                      ),
-                      onPressed: () async {
-                        final auth = Provider.of<AuthProvider>(context, listen: false);
-                        await ApiService.updateProfile(
-                          auth.user!.id,
-                          _firstNameController.text,
-                          _lastNameController.text,
-                          _bioController.text,
-                          _newAvatar
-                        );
-                        auth.updateLocalProfile(_firstNameController.text, _lastNameController.text, _bioController.text);
-                        Navigator.pop(context);
-                        fetchProfile();
+                    const SizedBox(height: 20),
+                    Text("CUSTOMIZE_IDENTITY", style: GoogleFonts.righteous(color: AppTheme.peach, fontSize: 20)),
+                    const SizedBox(height: 20),
+                    GestureDetector(
+                      onTap: () async {
+                        final picker = ImagePicker();
+                        final image = await picker.pickImage(source: ImageSource.gallery);
+                        if (image != null) setModalState(() => _newAvatar = image);
                       },
-                      child: Text("SYNC_CHANGES", style: GoogleFonts.spaceMono(color: AppTheme.darkPurple, fontWeight: FontWeight.bold)),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(color: AppTheme.peach, width: 2),
+                          boxShadow: [BoxShadow(color: AppTheme.peach.withOpacity(0.2), blurRadius: 15)]
+                        ),
+                        child: CircleAvatar(
+                          radius: 40,
+                          backgroundColor: AppTheme.darkPurple,
+                          backgroundImage: _newAvatar != null
+                            ? (kIsWeb ? NetworkImage(_newAvatar!.path) : FileImage(File(_newAvatar!.path)) as ImageProvider)
+                            : (_profileData?['avatar'] != null ? NetworkImage("${ApiService.baseUrl.replaceFirst('/api', '')}${_profileData!['avatar']}") : null),
+                          child: _newAvatar == null && _profileData?['avatar'] == null ? const Icon(Icons.camera_alt, color: AppTheme.peach) : null,
+                        ),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 30),
-                ],
+                    const SizedBox(height: 20),
+                    TextField(
+                      controller: _firstNameController,
+                      style: GoogleFonts.spaceMono(color: Colors.white),
+                      decoration: InputDecoration(
+                        labelText: "FIRST_NAME",
+                        labelStyle: GoogleFonts.spaceMono(color: AppTheme.peach),
+                        enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.white10)),
+                        focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: AppTheme.peach)),
+                      ),
+                    ),
+                    const SizedBox(height: 15),
+                    TextField(
+                      controller: _lastNameController,
+                      style: GoogleFonts.spaceMono(color: Colors.white),
+                      decoration: InputDecoration(
+                        labelText: "LAST_NAME",
+                        labelStyle: GoogleFonts.spaceMono(color: AppTheme.peach),
+                        enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.white10)),
+                        focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: AppTheme.peach)),
+                      ),
+                    ),
+                    const SizedBox(height: 15),
+                    TextField(
+                      controller: _bioController,
+                      style: GoogleFonts.spaceMono(color: Colors.white),
+                      maxLines: 3,
+                      decoration: InputDecoration(
+                        labelText: "BIOGRAPHY_DATA",
+                        labelStyle: GoogleFonts.spaceMono(color: AppTheme.peach),
+                        enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.white10)),
+                        focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: AppTheme.peach)),
+                      ),
+                    ),
+                    const SizedBox(height: 30),
+                    Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(15),
+                        boxShadow: [BoxShadow(color: AppTheme.peach.withOpacity(0.3), blurRadius: 15)],
+                      ),
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.peach,
+                          minimumSize: const Size(double.infinity, 50),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                        ),
+                        onPressed: () async {
+                          final auth = Provider.of<AuthProvider>(context, listen: false);
+                          await ApiService.updateProfile(
+                            auth.user!.id,
+                            _firstNameController.text,
+                            _lastNameController.text,
+                            _bioController.text,
+                            _newAvatar
+                          );
+                          auth.updateLocalProfile(_firstNameController.text, _lastNameController.text, _bioController.text);
+                          Navigator.pop(context);
+                          fetchProfile();
+                        },
+                        child: Text("SYNC_CHANGES", style: GoogleFonts.spaceMono(color: AppTheme.darkPurple, fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                    const SizedBox(height: 30),
+                  ],
+                ),
               ),
             ),
           ),
@@ -223,7 +226,7 @@ class ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return widget.targetUserId != null 
+      return widget.targetUserId != null
         ? const Scaffold(body: DynamicBackground(child: Center(child: CircularProgressIndicator(color: AppTheme.peach))))
         : const Center(child: CircularProgressIndicator(color: AppTheme.peach));
     }
@@ -283,10 +286,10 @@ class ProfileScreenState extends State<ProfileScreen> {
               radius: 45,
               backgroundColor: AppTheme.darkPurple,
               backgroundImage: _profileData?['avatar'] != null
-                ? NetworkImage("${ApiService.baseUrl.replaceFirst('/api', '')}${_profileData?['avatar']}")      
+                ? NetworkImage("${ApiService.baseUrl.replaceFirst('/api', '')}${_profileData!['avatar']}")
                 : null,
               child: _profileData?['avatar'] == null
-                ? Text(username[0].toUpperCase(), style: GoogleFonts.righteous(fontSize: 30, color: AppTheme.peach))  
+                ? Text(username[0].toUpperCase(), style: GoogleFonts.righteous(fontSize: 30, color: AppTheme.peach))
                 : null,
             ),
           ),
@@ -298,7 +301,7 @@ class ProfileScreenState extends State<ProfileScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text("@$username", style: GoogleFonts.righteous(fontSize: 22, color: AppTheme.peach)),     
+                    Text("@$username", style: GoogleFonts.righteous(fontSize: 22, color: AppTheme.peach)),
                     if (isOwner)
                       Container(
                         decoration: BoxDecoration(
@@ -332,6 +335,41 @@ class ProfileScreenState extends State<ProfileScreen> {
                         border: Border.all(color: AppTheme.peach.withOpacity(0.3)),
                       ),
                       child: Text("EDIT_IDENTITY", style: GoogleFonts.spaceMono(fontSize: 10, color: AppTheme.peach, fontWeight: FontWeight.bold)),
+                    ),
+                  )
+                else
+                  InkWell(
+                    onTap: () async {
+                      if(auth.user?.id == null || widget.targetUserId == null) return;
+                      final result = await ApiService.followUser(auth.user!.id, widget.targetUserId!);
+                      print("Follow/Unfollow API Result: $result"); // Debugging line
+                      if (result['success'] == true) {
+                        setState(() {
+                          _isFollowing = !_isFollowing;
+                          int currentFollowers = _profileData?['followerCount'] ?? 0;
+                           _profileData?['followerCount'] = _isFollowing ? currentFollowers + 1 : currentFollowers - 1;
+                        });
+                      } else {
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text("Action failed: ${result['message'] ?? 'Unknown error'}", style: GoogleFonts.spaceMono(color: Colors.white)),
+                            backgroundColor: AppTheme.coral,
+                          )
+                        );
+                      }
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: _isFollowing ? Colors.transparent : AppTheme.peach,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppTheme.peach),
+                      ),
+                      child: Text(
+                        _isFollowing ? "FOLLOWING" : "FOLLOW",
+                        style: GoogleFonts.spaceMono(fontSize: 10, color: _isFollowing ? AppTheme.peach : AppTheme.darkPurple, fontWeight: FontWeight.bold),
+                      ),
                     ),
                   ),
               ],
@@ -398,11 +436,11 @@ class ProfileScreenState extends State<ProfileScreen> {
       child: Column(
         children: [
           Text(label, style: GoogleFonts.righteous(color: active ? AppTheme.peach : Colors.white24, fontSize: 16)),
-          if (active) 
+          if (active)
             Container(
-              margin: const EdgeInsets.only(top: 4), 
-              height: 2, 
-              width: 40, 
+              margin: const EdgeInsets.only(top: 4),
+              height: 2,
+              width: 40,
               decoration: BoxDecoration(
                 color: AppTheme.peach,
                 boxShadow: [BoxShadow(color: AppTheme.peach, blurRadius: 5)]
@@ -439,7 +477,7 @@ class ProfileScreenState extends State<ProfileScreen> {
                   Text("@${item['author'] ?? "SOURCE"}", style: GoogleFonts.spaceMono(color: AppTheme.peach, fontSize: 10, fontWeight: FontWeight.bold)),
                   if (_currentTab == 1) // Only show permanent delete in Archive
                     IconButton(
-                      icon: const Icon(Icons.delete_forever_rounded, color: AppTheme.coral, size: 20),        
+                      icon: const Icon(Icons.delete_forever_rounded, color: AppTheme.coral, size: 20),
                       onPressed: () => _handlePermanentDelete(item['id']),
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
@@ -447,7 +485,7 @@ class ProfileScreenState extends State<ProfileScreen> {
                 ],
               ),
               const SizedBox(height: 10),
-              Text(item['content'] ?? "", style: GoogleFonts.spaceMono(color: Colors.white, fontSize: 12)),     
+              Text(item['content'] ?? "", style: GoogleFonts.spaceMono(color: Colors.white, fontSize: 12)),
               const SizedBox(height: 12),
               if (item['mediaUrl'] != null)
                 Container(
@@ -459,7 +497,7 @@ class ProfileScreenState extends State<ProfileScreen> {
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(9),
                     child: item['isVideo'] == true
-                      ? Container(
+                      ? SizedBox(
                           height: 150,
                           child: VideoPlayerWidget(
                             videoUrl: "${ApiService.baseUrl.replaceFirst('/api', '')}${item['mediaUrl']}",
@@ -472,8 +510,6 @@ class ProfileScreenState extends State<ProfileScreen> {
                         ),
                   ),
                 ),
-              if (item['id'] != null)
-                Text("ID: ${item['id'].toString().substring(0,8)}...", style: GoogleFonts.spaceMono(color: AppTheme.peach.withOpacity(0.5), fontSize: 8)),
             ],
           ),
         ).animate().fade(duration: 300.ms, delay: (index * 50).ms).slideX(begin: 0.1);
