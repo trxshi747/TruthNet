@@ -112,9 +112,29 @@ def analyze_toxicity(text: str) -> dict:
     }
 
 
-def analyze_batch(texts: list[str]) -> list[dict]:
-    return [analyze_toxicity(t) for t in texts]
+# def analyze_batch(texts: list[str]) -> list[dict]:
+#     return [analyze_toxicity(t) for t in texts]
 
+def analyze_batch(texts: list[str]) -> list[dict]:
+    """Analyse plusieurs textes de manière vectorisée et performante."""
+    clf = _get_pipeline()
+    if not texts:
+        return []
+        
+    # Tronquer chaque texte à 512 caractères proprement avant l'envoi
+    cleaned_texts = [t[:512] if t else "" for t in texts]
+    
+    # Envoi direct de la liste au pipeline (HuggingFace traite cela en batch matriciel au niveau CPU/GPU)
+    raw_results = clf(cleaned_texts)
+    
+    # Il ne te reste plus qu'à formater la liste de résultats reçue
+    formatted_results = []
+    for raw in raw_results:
+        # Si top_k=None, raw est une liste de dicts dicts [{'label':..., 'score':...}, ...]
+        # Applique ta logique de normalisation ici pour chaque élément
+        formatted_results.append(format_single_raw_result(raw))
+        
+    return formatted_results
 
 def aggregate_toxicity(results: list[dict]) -> dict:
     """
