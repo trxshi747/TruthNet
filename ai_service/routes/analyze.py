@@ -18,6 +18,12 @@ from models.toxicity import (
     aggregate_toxicity,
 )
 
+from models.topic_classifier import (
+    classify_topic,
+    analyze_batch as topic_batch,
+    aggregate_topics,
+)
+
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/analyze", tags=["Analysis"])
 
@@ -79,15 +85,35 @@ async def analyze_full_endpoint(body: SingleTextRequest):
     try:
         sentiment = analyze_sentiment(body.text)
         toxicity  = analyze_toxicity(body.text)
+        topic = classify_topic(body.text)
         return {
             "success":   True,
             "text":      body.text[:100] + ("…" if len(body.text) > 100 else ""),
             "sentiment": sentiment,
             "toxicity":  toxicity,
+            "topic": topic,
         }
     except Exception as e:
         logger.error(f"Full analysis error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/topic")
+async def analyze_topic_endpoint(body: SingleTextRequest):
+"""
+Analyse the topic of a single text.
+"""
+
+try:
+    result = classify_topic(body.text)
+
+    return {
+        "success": True,
+        "result": result,
+    }
+
+except Exception as e:
+    logger.error(f"Topic analysis error: {e}")
+    raise HTTPException(status_code=500, detail=str(e))
 
 
 # ─── Batch endpoints ──────────────────────────────────────────────────────────
@@ -167,9 +193,11 @@ async def dashboard_summary(body: BatchTextRequest):
     try:
         s_results = sentiment_batch(body.texts)
         t_results = toxicity_batch(body.texts)
+        topic_results = topic_batch(body.texts)
 
         s_agg = aggregate_sentiment(s_results)
         t_agg = aggregate_toxicity(t_results)
+        topic_agg = aggregate_topics(topic_results)
 
         # Top toxicity categories (sorted by count desc)
         top_categories = sorted(
@@ -183,6 +211,8 @@ async def dashboard_summary(body: BatchTextRequest):
             "total":    len(body.texts),
             "sentiment": s_agg,
             "toxicity":  t_agg,
+            "topics": topic_agg,
+
             "top_toxic_categories": [
                 {"category": cat, "count": cnt}
                 for cat, cnt in top_categories

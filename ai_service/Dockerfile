@@ -23,15 +23,23 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # ── Step 3: bake HuggingFace models into the image ───────────────────────────
-RUN python -c "\
-from transformers import AutoTokenizer, AutoModelForSequenceClassification; \
-print('Downloading sentiment model...'); \
-AutoTokenizer.from_pretrained('cardiffnlp/twitter-roberta-base-sentiment-latest'); \
-AutoModelForSequenceClassification.from_pretrained('cardiffnlp/twitter-roberta-base-sentiment-latest'); \
-print('Downloading toxicity model...'); \
-AutoTokenizer.from_pretrained('martin-ha/toxic-comment-model'); \
-AutoModelForSequenceClassification.from_pretrained('martin-ha/toxic-comment-model'); \
-print('All models ready.')"
+RUN python - <<EOF
+from transformers import AutoTokenizer, AutoModelForSequenceClassification
+
+print('Downloading sentiment model...')
+AutoTokenizer.from_pretrained('cardiffnlp/twitter-roberta-base-sentiment-latest')
+AutoModelForSequenceClassification.from_pretrained('cardiffnlp/twitter-roberta-base-sentiment-latest')
+
+print('Downloading toxicity model...')
+AutoTokenizer.from_pretrained('martin-ha/toxic-comment-model')
+AutoModelForSequenceClassification.from_pretrained('martin-ha/toxic-comment-model')
+
+print('Downloading topic classifier...')
+AutoTokenizer.from_pretrained('MoritzLaurer/mDeBERTa-v3-base-xnli')
+AutoModelForSequenceClassification.from_pretrained('MoritzLaurer/mDeBERTa-v3-base-xnli')
+
+print('All models ready.')
+EOF
 
 COPY . .
 

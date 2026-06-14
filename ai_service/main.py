@@ -13,6 +13,8 @@ from dotenv import load_dotenv
 
 from routes.analyze import router as analyze_router
 
+from models.topic_classifier import (_get_pipeline as load_topic_classifier)
+
 load_dotenv()
 logging.basicConfig(
     level=logging.INFO,
@@ -30,6 +32,8 @@ async def lifespan(app: FastAPI):
     from models.toxicity  import _get_pipeline as load_toxicity
     load_sentiment()
     load_toxicity()
+    load_topic_classifier()
+
     logger.info("✅ Models ready")
     yield
     logger.info("🔴 AI service shutting down")
