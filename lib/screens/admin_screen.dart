@@ -3,6 +3,10 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:model2/core/theme/app_theme.dart';
 import 'package:model2/widgets/dynamic_background.dart';
 
+import 'package:model2/providers/auth_provider.dart';
+import 'package:provider/provider.dart';
+import 'login_screen.dart';
+
 import 'admin/admin_dashboard_screen.dart';
 import 'admin/admin_moderator_screen.dart';
 import 'admin/admin_role_screen.dart';
@@ -20,10 +24,9 @@ class _AdminScreenState extends State<AdminScreen> {
 
   final List<String> titles = [
     "Dashboard",
-    "Users",
+    "User Management",
     "Moderators",
     "Roles",
-    "Rules",
     "Settings",
   ];
 
@@ -32,12 +35,13 @@ class _AdminScreenState extends State<AdminScreen> {
     const AdminUsersScreen(),
     const AdminModeratorsScreen(),
     const AdminRoleScreen(),
-    const Center(child: Text("RULES")),
     const Center(child: Text("SETTINGS")),
   ];
 
   @override
   Widget build(BuildContext context) {
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+
     return Scaffold(
       body: Row(
         children: [
@@ -110,6 +114,42 @@ class _AdminScreenState extends State<AdminScreen> {
                     },
                   ),
                 ),
+
+                // LOGOUT BUTTON
+                Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: InkWell(
+                    onTap: () {
+                      auth.logout();
+                      Navigator.pushAndRemoveUntil(
+                        context,
+                        MaterialPageRoute(builder: (_) => LoginScreen()),
+                        (route) => false,
+                      );
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: AppTheme.coral),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.logout, color: AppTheme.coral),
+                          const SizedBox(width: 10),
+                          Text(
+                            "LOGOUT",
+                            style: GoogleFonts.spaceMono(
+                              color: AppTheme.coral,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
@@ -136,8 +176,6 @@ class _AdminScreenState extends State<AdminScreen> {
       case 3:
         return Icons.assignment_ind;
       case 4:
-        return Icons.gavel;
-      case 5:
         return Icons.settings;
       default:
         return Icons.circle;

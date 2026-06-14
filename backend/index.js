@@ -1,4 +1,6 @@
 const express = require('express');
+const http = require('http');
+const { Server } = require("socket.io");
 const neo4j = require('neo4j-driver');
 require('dotenv').config();
 const bodyParser = require('body-parser');
@@ -9,6 +11,82 @@ const path = require('path');
 const fs = require('fs');
 
 const app = express();
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST", "PUT", "DELETE"]
+  }
+});
+
+// Socket mapping
+const userSockets = new Map(); // userId -> socketId
+
+io.on('connection', (socket) => {
+    console.log('A user connected:', socket.id);
+
+    socket.on('register', (userId) => {
+        userSockets.set(userId, socket.id);
+        console.log(`User ${userId} registered to socket ${socket.id}`);
+    });
+
+    socket.on('disconnect', () => {
+        console.log('User disconnected:', socket.id);
+        for (let [userId, sockId] of userSockets.entries()) {
+            if (sockId === socket.id) {
+                userSockets.delete(userId);
+                break;
+            }
+        }
+    });
+});
+
+async function sendNotification(session, type, actorId, targetId, postId = null, commentId = null, text = "") {
+    if (actorId === targetId) return; // Don't notify self
+
+    try {
+        const notifId = require('crypto').randomUUID();
+        const result = await session.run(`
+            MATCH (target:User {id: $targetId})
+            MATCH (actor:User {id: $actorId})
+            OPTIONAL MATCH (actor)-[:HAS_PROFILE]->(p:Profile)
+            CREATE (n:Notification {
+                id: $notifId,
+                type: $type,
+                text: $text,
+                postId: $postId,
+                commentId: $commentId,
+                isRead: false,
+                createdAt: timestamp()
+            })
+            CREATE (n)-[:NOTIFIES]->(target)
+            CREATE (actor)-[:INITIATED_NOTIF]->(n)
+            RETURN n, actor.username as actorUsername, p.avatar as actorAvatar, actor.id as actorId
+        `, { targetId, actorId, notifId, type, text, postId, commentId });
+        
+        if (result.records.length > 0) {
+            const notif = result.records[0].get('n').properties;
+            const actorUsername = result.records[0].get('actorUsername');
+            const actorAvatar = result.records[0].get('actorAvatar');
+            const resultActorId = result.records[0].get('actorId');
+            const payload = { 
+                ...notif, 
+                createdAt: notif.createdAt.toNumber(), // Convert Neo4j integer to standard JS number
+                actorUsername, 
+                actorAvatar,
+                actorId: resultActorId
+            };
+            
+            const targetSocketId = userSockets.get(targetId);
+            if (targetSocketId) {
+                io.to(targetSocketId).emit('new_notification', payload);
+            }
+        }
+    } catch (e) {
+        console.error("Error creating notification:", e);
+    }
+}
+
 app.use(cors());
 app.use(bodyParser.json());
 app.use('/uploads', express.static('uploads'));
@@ -99,12 +177,15 @@ app.post('/api/auth/register', async (req, res) => {
     const targetRole = role || "Member";
     const isStandardUser = targetRole === "Member";
 
+    const userId = require('crypto').randomUUID();
+    const profileId = require('crypto').randomUUID();
+
     let result;
     if (isStandardUser) {
         result = await session.run(`
           MERGE (r:Role {name: $roleName})
           CREATE (u:User:AuthenticatedUser {
-            id:               randomUUID(),
+            id:               $userId,
             firstName:        $firstName,
             lastName:         $lastName,
             username:         $username,
@@ -114,7 +195,7 @@ app.post('/api/auth/register', async (req, res) => {
             registrationDate: timestamp()
           })
           CREATE (p:Profile {
-            id:              randomUUID(),
+            id:              $profileId,
             bio:             '',
             avatar:          null,
             privacyLevel:    'public',
@@ -124,13 +205,13 @@ app.post('/api/auth/register', async (req, res) => {
           CREATE (u)-[:HAS_ROLE]->(r)
           CREATE (u)-[:HAS_PROFILE]->(p)
           RETURN u, r.name as role
-        `, { email, hashedPassword, firstName, lastName, username, roleName: targetRole });
+        `, { email, hashedPassword, firstName, lastName, username, roleName: targetRole, userId, profileId });
     } else {
         const userLabel = targetRole === "Admin" ? "Administrator" : "Moderator";
         result = await session.run(`
           MERGE (r:Role {name: $roleName})
           CREATE (u:User:${userLabel} {
-            id:               randomUUID(),
+            id:               $userId,
             firstName:        $firstName,
             lastName:         $lastName,
             username:         $username,
@@ -141,7 +222,7 @@ app.post('/api/auth/register', async (req, res) => {
           })
           CREATE (u)-[:HAS_ROLE]->(r)
           RETURN u, r.name as role
-        `, { email, hashedPassword, firstName, lastName, username, roleName: targetRole });
+        `, { email, hashedPassword, firstName, lastName, username, roleName: targetRole, userId });
     }
 
     const user = result.records[0].get('u').properties;
@@ -151,31 +232,83 @@ app.post('/api/auth/register', async (req, res) => {
     });
 
   } catch (e) {
-    res.status(500).json({ success: false, message: e.message });
+      console.log("Error in /api/users/follow:", e);
+      res.status(500).json({ success: false, message: e.message });
   } finally {
-    await session.close();
+      await session.close();
   }
 });
 
 app.post('/api/auth/login', async (req, res) => {
-    const { email, password } = req.body; // Keeping field name 'email' for compatibility, but using it as identifier
+    const { email, password } = req.body;
     const session = driver.session();
     try {
         const result = await session.run(
-            'MATCH (u:User) WHERE u.email = $email OR u.username = $email ' +
-            'MATCH (u)-[:HAS_ROLE]->(r:Role) RETURN u, r.name as role', 
+            `MATCH (u:User) WHERE u.email = $email OR u.username = $email
+             OPTIONAL MATCH (u)-[:HAS_ROLE]->(r:Role)
+             OPTIONAL MATCH (u)-[:HAS_SANCTION]->(s:Sanction {status: 'ACTIVE'})
+             RETURN u, r.name as role, collect(s) as sanctions`, 
             { email }
         );
+
         if (result.records.length > 0) {
-            const user = result.records[0].get('u').properties;
+            const firstRecord = result.records[0];
+            const user = firstRecord.get('u').properties;
+            const role = firstRecord.get('role');
+            const sanctions = firstRecord.get('sanctions').map(s => s.properties);
+
             if (await bcrypt.compare(password, user.password)) {
-                res.json({ success: true, user: { ...user, role: result.records[0].get('role') } });
-            } else res.status(401).json({ success: false, message: "INVALID_CREDENTIALS" });
-        } else res.status(401).json({ success: false, message: "USER_NOT_FOUND" });
+                // Check status
+                const status = (user.status || 'ACTIVE').toUpperCase();
+                
+                if (status === 'INACTIVE') {
+                    return res.status(403).json({ 
+                        success: false, 
+                        message: "ACCOUNT_DEACTIVATED",
+                        detail: "Your account has been deactivated by an administrator."
+                    });
+                }
+
+                if (status === 'BANNED') {
+                    return res.status(403).json({ 
+                        success: false, 
+                        message: "ACCOUNT_BANNED",
+                        detail: "Your account has been permanently banned."
+                    });
+                }
+
+                if (status === 'SUSPENDED') {
+                    const now = new Date();
+                    // Check if ANY active sanction is still in the future
+                    const activeSanction = sanctions.find(s => s.endDate && new Date(s.endDate) > now);
+                    
+                    if (activeSanction) {
+                        return res.status(403).json({ 
+                            success: false, 
+                            message: "ACCOUNT_SUSPENDED",
+                            detail: `Your account is suspended until ${activeSanction.endDate}.`,
+                            until: activeSanction.endDate
+                        });
+                    } else {
+                        // All sanctions expired, reactivate user
+                        await session.run('MATCH (u:User {id: $id}) SET u.status = "ACTIVE"', { id: user.id });
+                        user.status = 'ACTIVE';
+                    }
+                }
+
+                res.json({ success: true, user: { ...user, role } });
+            } else {
+                res.status(401).json({ success: false, message: "INVALID_CREDENTIALS" });
+            }
+        } else {
+            res.status(401).json({ success: false, message: "USER_NOT_FOUND" });
+        }
     } catch (e) {
         console.error("DB Error:", e.message);
         res.status(500).json({ success: false, message: e.message });
-    } finally { await session.close(); }
+    } finally {
+        await session.close();
+    }
 });
 
 // --- SETTINGS & ACCOUNT ---
@@ -301,33 +434,99 @@ app.get('/api/feed', async (req, res) => {
              ORDER BY p.createdAt DESC`,
             { userId: userId || "" }
         );
-        res.json(result.records.map(r => ({
-            author: r.get('author'),
-            authorId: r.get('authorId'),
-            ...r.get('post').properties,
-            likeCount: r.get('likeCount').toInt(),
-            commentCount: r.get('commentCount').toInt(),
-            shareCount: r.get('shareCount').toInt(),
-            isSaved: r.get('isSaved'),
-            isLiked: r.get('isLiked')
-        })));
+        res.json(result.records.map(r => {
+            const postProps = r.get('post').properties;
+            return {
+                author: r.get('author'),
+                authorId: r.get('authorId'),
+                ...postProps,
+                likeCount: r.get('likeCount').toInt(),
+                commentCount: r.get('commentCount').toInt(),
+                shareCount: r.get('shareCount').toInt(),
+                isSaved: r.get('isSaved'),
+                isLiked: r.get('isLiked'),
+                
+                // Explicitly mapping fact-check results
+                truthScore: postProps.truthScore,
+                truthVerdict: postProps.truthVerdict,
+                truthExplanation: postProps.truthExplanation,
+                truthSources: postProps.truthSources
+            };
+        }));
     } catch (e) { res.status(500).json([]); }
     finally { await session.close(); }
 });
 
 app.get('/api/users/search', async (req, res) => {
-    const { query } = req.query;
+    const { query, excludeId } = req.query;
     const session = driver.session();
     try {
         const result = await session.run(
             `MATCH (u:User)
              WHERE toLower(u.username) CONTAINS toLower($query)
-             RETURN u.username as name, u.id as id LIMIT 5`,
-            { query: query || "" }
+               AND u.id <> $excludeId
+             OPTIONAL MATCH (me:User {id: $excludeId})-[r1:FOLLOWS]->(u)
+             OPTIONAL MATCH (u)-[r2:FOLLOWS]->(me)
+             WITH u,
+                  CASE WHEN r1 IS NOT NULL AND r2 IS NOT NULL THEN 3
+                       WHEN r1 IS NOT NULL THEN 2
+                       WHEN r2 IS NOT NULL THEN 1
+                       ELSE 0 END AS priority
+             ORDER BY priority DESC, u.username ASC
+             RETURN u.username as name, u.id as id LIMIT 10`,
+            { query: query || "", excludeId: excludeId || "" }
         );
         res.json(result.records.map(r => ({ name: r.get('name'), id: r.get('id') })));
     } catch (e) { res.status(500).json([]); }
     finally { await session.close(); }
+});
+
+app.get('/api/posts/search', async (req, res) => {
+    const { query, excludeId } = req.query;
+    const session = driver.session();
+    try {
+        const result = await session.run(
+            `MATCH (u:User)-[:OWNS_POST]->(p:Post)
+             WHERE toLower(coalesce(p.content, '')) CONTAINS toLower($query) 
+               AND u.id <> $excludeId
+               AND (p.isDeleted IS NULL OR p.isDeleted = false)
+               AND p.visibility = 'public'
+             RETURN u.username as author, u.id as authorId, p as post LIMIT 10`,
+            { query: query || "", excludeId: excludeId || "" }
+        );
+        res.json(result.records.map(r => ({ author: r.get('author'), authorId: r.get('authorId'), ...r.get('post').properties })));
+    } catch (e) { res.status(500).json([]); }
+    finally { await session.close(); }
+});
+
+app.post('/api/users/follow', async (req, res) => {
+    const { userId, targetId } = req.body;
+    const session = driver.session();
+    try {
+        const check = await session.run('MATCH (a:User {id: $userId})-[r:FOLLOWS]->(b:User {id: $targetId}) RETURN r', { userId, targetId });
+        if (check.records.length > 0) {
+            // Unfollow
+            await session.run('MATCH (a:User {id: $userId})-[r:FOLLOWS]->(b:User {id: $targetId}) DELETE r', { userId, targetId });
+            await session.run('MATCH (p1:Profile)<-[:HAS_PROFILE]-(:User {id: $userId}) SET p1.followingCount = p1.followingCount - 1', { userId });
+            await session.run('MATCH (p2:Profile)<-[:HAS_PROFILE]-(:User {id: $targetId}) SET p2.followerCount = p2.followerCount - 1', { targetId });
+            res.json({ success: true, action: 'unfollowed' });
+        } else {
+            // Follow
+            await session.run('MATCH (a:User {id: $userId}), (b:User {id: $targetId}) CREATE (a)-[:FOLLOWS]->(b)', { userId, targetId });
+            await session.run('MATCH (p1:Profile)<-[:HAS_PROFILE]-(:User {id: $userId}) SET p1.followingCount = p1.followingCount + 1', { userId });
+            await session.run('MATCH (p2:Profile)<-[:HAS_PROFILE]-(:User {id: $targetId}) SET p2.followerCount = p2.followerCount + 1', { targetId });
+            
+            // Send notification
+            await sendNotification(session, 'follow', userId, targetId, null, null, "started following you");
+            
+            res.json({ success: true, action: 'followed' });
+        }
+    } catch (e) {
+        console.log("Error in /api/users/follow:", e);
+        res.status(500).json({ success: false, message: e.message });
+    } finally {
+        await session.close();
+    }
 });
 
 
@@ -347,9 +546,9 @@ app.post('/api/posts/like', async (req, res) => {
             );
             res.json({ success: true, action: 'unliked' });
         } else {
-            await session.run(`
+            const createResult = await session.run(`
                 MATCH (u:User {id: $userId})
-                MATCH (p:Post {id: $postId})
+                MATCH (p:Post {id: $postId})<-[:OWNS_POST]-(owner:User)
                 CREATE (r:Reaction {
                     id: randomUUID(),
                     type: 'LIKE',
@@ -359,7 +558,13 @@ app.post('/api/posts/like', async (req, res) => {
                 CREATE (u)-[:OWNS_REACTION]->(r)
                 CREATE (r)-[:TARGETS]->(p)
                 CREATE (r)-[:HAS_REACTION]->(p)
+                RETURN owner.id as ownerId
             `, { userId, postId });
+            
+            if (createResult.records.length > 0) {
+                const ownerId = createResult.records[0].get('ownerId');
+                await sendNotification(session, 'like_post', userId, ownerId, postId, null, "liked your post");
+            }
             res.json({ success: true, action: 'liked' });
         }
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
@@ -392,6 +597,74 @@ app.post('/api/posts/save', async (req, res) => {
     finally { await session.close(); }
 });
 
+// --- MESSAGES ---
+
+app.post('/api/messages', async (req, res) => {
+    const { senderId, receiverId, content } = req.body;
+    const session = driver.session();
+    try {
+        const result = await session.run(
+            `MATCH (sender:User {id: $senderId}), (receiver:User {id: $receiverId})
+             CREATE (m:Message {id: randomUUID(), content: $content, createdAt: timestamp()})
+             CREATE (sender)-[:SENT]->(m)-[:TO]->(receiver)
+             RETURN m`,
+            { senderId, receiverId, content }
+        );
+        res.json({ success: true, message: result.records[0].get('m').properties });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+    finally { await session.close(); }
+});
+
+app.get('/api/messages/history/:userId/:otherId', async (req, res) => {
+    const { userId, otherId } = req.params;
+    const session = driver.session();
+    try {
+        const result = await session.run(
+            `MATCH (sender:User)-[:SENT]->(m:Message)-[:TO]->(receiver:User)
+             WHERE (sender.id = $userId AND receiver.id = $otherId)
+                OR (sender.id = $otherId AND receiver.id = $userId)
+             RETURN m.id as id, m.content as content, m.createdAt as createdAt, sender.id as senderId
+             ORDER BY m.createdAt ASC`,
+            { userId, otherId }
+        );
+        res.json(result.records.map(r => ({
+            id: r.get('id'), content: r.get('content'), createdAt: r.get('createdAt').toNumber(), senderId: r.get('senderId')
+        })));
+    } catch (e) { res.status(500).json([]); }
+    finally { await session.close(); }
+});
+
+app.get('/api/messages/conversations/:userId', async (req, res) => {
+    const { userId } = req.params;
+    const session = driver.session();
+    try {
+        const result = await session.run(
+            `MATCH (u:User {id: $userId})
+             MATCH (u)-[:SENT]->(m:Message)-[:TO]->(other:User)
+             WITH other, m ORDER BY m.createdAt DESC
+             WITH other, collect(m)[0] as lastMsg
+             RETURN other.id as id, other.username as username, lastMsg.content as lastMessage, lastMsg.createdAt as lastMessageAt
+             UNION
+             MATCH (u:User {id: $userId})
+             MATCH (other:User)-[:SENT]->(m:Message)-[:TO]->(u)
+             WITH other, m ORDER BY m.createdAt DESC
+             WITH other, collect(m)[0] as lastMsg
+             RETURN other.id as id, other.username as username, lastMsg.content as lastMessage, lastMsg.createdAt as lastMessageAt`,
+            { userId }
+        );
+        const convos = {};
+        result.records.forEach(r => {
+            const id = r.get('id');
+            const time = r.get('lastMessageAt').toNumber();
+            if (!convos[id] || convos[id].lastMessageAt < time) {
+                convos[id] = { id, username: r.get('username'), lastMessage: r.get('lastMessage'), lastMessageAt: time };
+            }
+        });
+        res.json(Object.values(convos).sort((a,b) => b.lastMessageAt - a.lastMessageAt));
+    } catch (e) { res.status(500).json([]); }
+    finally { await session.close(); }
+});
+
 // --- Admin Dashboard Metrics ---
 app.get('/api/admin/dashboard', async (req, res) => {
     const session = driver.session();
@@ -407,7 +680,12 @@ app.get('/api/admin/dashboard', async (req, res) => {
             MATCH (c:Comment)
             WITH users, posts, count(c) as comments
 
-            RETURN users, posts, comments
+            OPTIONAL MATCH ()-[r:REPORTED]->()
+            WITH users, posts, comments, count(r) as reports,
+                 sum(CASE WHEN r.status = 'pending' THEN 1 ELSE 0 END) as pendingReports,
+                 sum(CASE WHEN r.status = 'resolved' THEN 1 ELSE 0 END) as resolvedReports
+
+            RETURN users, posts, comments, reports, pendingReports, resolvedReports
         `);
 
         const record = result.records[0];
@@ -415,7 +693,10 @@ app.get('/api/admin/dashboard', async (req, res) => {
         res.json({
             users: record.get('users').toInt(),
             posts: record.get('posts').toInt(),
-            comments: record.get('comments').toInt()
+            comments: record.get('comments').toInt(),
+            reports: record.get('reports').toInt(),
+            pendingReports: record.get('pendingReports').toInt(),
+            resolvedReports: record.get('resolvedReports').toInt()
         });
 
     } catch (e) {
@@ -429,6 +710,7 @@ app.get('/api/admin/dashboard', async (req, res) => {
 
 app.get('/api/users/:userId/profile', async (req, res) => {
     const { userId } = req.params;
+    const { currentUserId } = req.query;
     const session = driver.session();
     try {
         // Check if user is an admin or moderator first
@@ -449,13 +731,12 @@ app.get('/api/users/:userId/profile', async (req, res) => {
         const profileResult = await session.run(
             `MATCH (u:User {id: $userId})-[:HAS_PROFILE]->(profile:Profile)
              OPTIONAL MATCH (u)-[:OWNS_POST]->(p:Post) WHERE p.isDeleted IS NULL OR p.isDeleted = false
-             OPTIONAL MATCH (profile)-[:HAS_FOLLOWING]->(following:Following)
-             OPTIONAL MATCH (profile)-[:HAS_FOLLOWER]->(follower:Follower)
              RETURN u, profile,
                     count(DISTINCT p) as postCount,
-                    count(DISTINCT following) as followingCount,
-                    count(DISTINCT follower) as followerCount`,
-            { userId }
+                    profile.followerCount as followerCount,
+                    profile.followingCount as followingCount,
+                    EXISTS((:User {id: $currentUserId})-[:FOLLOWS]->(u)) as isFollowing`,
+            { userId, currentUserId: currentUserId || "" }
         );
         if (profileResult.records.length > 0) {
             const user = profileResult.records[0].get('u').properties;
@@ -466,6 +747,7 @@ app.get('/api/users/:userId/profile', async (req, res) => {
                 postCount: profileResult.records[0].get('postCount').toInt(),
                 followingCount: profileResult.records[0].get('followingCount').toInt(),
                 followerCount: profileResult.records[0].get('followerCount').toInt(),
+                isFollowing: profileResult.records[0].get('isFollowing'),
                 hasProfile: true
             });
         } else {
@@ -503,7 +785,18 @@ app.get('/api/users/:userId/posts', async (req, res) => {
              ORDER BY p.createdAt DESC`,
             { userId }
         );
-        res.json(result.records.map(r => ({ author: r.get('author'), ...r.get('post').properties })));
+        res.json(result.records.map(r => {
+            const postProps = r.get('post').properties;
+            return {
+                author: r.get('author'),
+                ...postProps,
+                // Explicit mapping
+                truthScore: postProps.truthScore,
+                truthVerdict: postProps.truthVerdict,
+                truthExplanation: postProps.truthExplanation,
+                truthSources: postProps.truthSources
+            };
+        }));
     } catch (e) { res.status(500).json([]); }
     finally { await session.close(); }
 });
@@ -519,7 +812,18 @@ app.get('/api/users/:userId/archive', async (req, res) => {
              ORDER BY p.createdAt DESC`,
             { userId }
         );
-        res.json(result.records.map(r => ({ author: r.get('author'), ...r.get('post').properties })));
+        res.json(result.records.map(r => {
+            const postProps = r.get('post').properties;
+            return {
+                author: r.get('author'),
+                ...postProps,
+                // Explicit mapping
+                truthScore: postProps.truthScore,
+                truthVerdict: postProps.truthVerdict,
+                truthExplanation: postProps.truthExplanation,
+                truthSources: postProps.truthSources
+            };
+        }));
     } catch (e) { res.status(500).json([]); }
     finally { await session.close(); }
 });
@@ -533,6 +837,9 @@ app.post('/api/posts', upload.array('media', 10), async (req, res) => {
 
     // Handle multiple files
     const mediaUrls = req.files ? req.files.map(file => `/uploads/${file.filename}`) : [];
+    
+    // Maintain mediaUrl field for backward compatibility (first image)
+    const primaryMediaUrl = mediaUrls.length > 0 ? mediaUrls[0] : null;
 
     // Protocol Check: Strictly MP4 for videos
     if (isVideo) {
@@ -542,8 +849,52 @@ app.post('/api/posts', upload.array('media', 10), async (req, res) => {
       }
     }
 
-    // Maintain mediaUrl field for backward compatibility (first image)
-    const primaryMediaUrl = mediaUrls.length > 0 ? mediaUrls[0] : null;
+    // Toxicity Check
+    if (content && content.trim().length > 0) {
+        try {
+            const aiRes = await callAI('/analyze/toxicity', { text: content });
+            if (aiRes.success && aiRes.result && aiRes.result.degree === 'extreme') {
+                return res.status(400).json({ 
+                    success: false, 
+                    message: "CONTENT_TOO_TOXIC",
+                    detail: "Your content has been flagged as extremely toxic and cannot be published."
+                });
+            }
+        } catch (aiErr) {
+            console.warn("AI Toxicity check failed (skipping):", aiErr.message);
+        }
+    }
+
+    // --- NEW: Mandatory Fact-Check before publishing ---
+    let factCheckData = null;
+    try {
+        console.log(`[POST] Running mandatory fact-check for user ${userId}...`);
+        const factCheckRes = await callAI('/analyze/verify', { 
+            text: content || "[IMAGE_ONLY_POST]", 
+            image_url: primaryMediaUrl, 
+            is_video: isVideo 
+        });
+
+        if (factCheckRes.success) {
+            factCheckData = factCheckRes;
+            
+            // Block based on AI 'is_publishable' decision
+            if (factCheckRes.is_publishable === false) {
+                const isNonsense = factCheckRes.type === 'nonsense';
+                console.warn(`[POST] Publication blocked: ${factCheckRes.type} detected.`);
+                
+                return res.status(400).json({
+                    success: false,
+                    message: isNonsense ? "CONTENT_NONSENSE" : "CONTENT_UNVERIFIED",
+                    detail: factCheckRes.explanation,
+                    verdict: factCheckRes.verdict,
+                    truth_score: factCheckRes.truth_score
+                });
+            }
+        }
+    } catch (fcErr) {
+        console.warn("AI Fact-check failed (skipping to allow publication):", fcErr.message);
+    }
 
     const session = driver.session();
     try {
@@ -558,11 +909,29 @@ app.post('/api/posts', upload.array('media', 10), async (req, res) => {
                 isVideo: $isVideo,
                 visibility: $visibility,
                 isDeleted: false,
-                createdAt: timestamp()
+                createdAt: timestamp(),
+                
+                // Store fact-check results
+                truthScore: $truthScore,
+                truthVerdict: $truthVerdict,
+                truthExplanation: $truthExplanation,
+                truthSources: $truthSources
              })
              CREATE (u)-[:OWNS_POST]->(p)
              RETURN p`,
-            { userId, content, primaryMediaUrl, mediaUrls, location: location || null, isVideo, visibility }
+            { 
+                userId, 
+                content, 
+                primaryMediaUrl, 
+                mediaUrls, 
+                location: location || null, 
+                isVideo, 
+                visibility,
+                truthScore: factCheckData ? factCheckData.truth_score : null,
+                truthVerdict: factCheckData ? factCheckData.verdict : null,
+                truthExplanation: factCheckData ? factCheckData.explanation : null,
+                truthSources: factCheckData ? (factCheckData.sources || []) : []
+            }
         );
         res.json(result.records[0].get('p').properties);
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
@@ -636,6 +1005,48 @@ app.delete('/api/posts/:postId/permanent', async (req, res) => {
 // --- INTERACTIONS ---
 
 
+app.get('/api/posts/:postId', async (req, res) => {
+    const { postId } = req.params;
+    const userId = req.query.userId;
+    const session = driver.session();
+    try {
+        const result = await session.run(
+            `MATCH (u:User)-[:OWNS_POST]->(p:Post {id: $postId})
+             WHERE (p.isDeleted IS NULL OR p.isDeleted = false)
+             RETURN u.username as author, u.id as authorId, p as post,
+                    COUNT { (p)<-[:HAS_REACTION]-() } as likeCount,
+                    COUNT { (p)<-[:HAS_COMMENT]-() } as commentCount,
+                    COUNT { (p)<-[:SHARED]-() } as shareCount,
+                    EXISTS { (p)<-[:SAVED]-(:User {id: $userId}) } as isSaved,
+                    EXISTS { (p)<-[:HAS_REACTION]-(r:Reaction {targetType: 'Post'})<-[:OWNS_REACTION]-(:User {id: $userId}) } as isLiked`,
+            { postId, userId: userId || "" }
+        );
+        if (result.records.length > 0) {
+            const r = result.records[0];
+            const postProps = r.get('post').properties;
+            res.json({
+                author: r.get('author'),
+                authorId: r.get('authorId'),
+                ...postProps,
+                likeCount: r.get('likeCount').toInt(),
+                commentCount: r.get('commentCount').toInt(),
+                shareCount: r.get('shareCount').toInt(),
+                isSaved: r.get('isSaved'),
+                isLiked: r.get('isLiked'),
+                
+                // Stored fact-check
+                truthScore: postProps.truthScore,
+                truthVerdict: postProps.truthVerdict,
+                truthExplanation: postProps.truthExplanation,
+                truthSources: postProps.truthSources
+            });
+        } else {
+            res.status(404).json({ message: "POST_NOT_FOUND" });
+        }
+    } catch (e) { res.status(500).json({ message: e.message }); }
+    finally { await session.close(); }
+});
+
 app.get('/api/posts/:postId/comments', async (req, res) => {
     const { postId } = req.params;
     const session = driver.session();
@@ -648,13 +1059,22 @@ app.get('/api/posts/:postId/comments', async (req, res) => {
              ORDER BY c.createdAt ASC`,
             { postId }
         );
-        res.json(result.records.map(r => ({
-            author: r.get('author'),
-            authorId: r.get('authorId'),
-            ...r.get('comment').properties,
-            likeCount: r.get('likeCount').toInt(),
-            replyCount: r.get('replyCount').toInt()
-        })));
+        res.json(result.records.map(r => {
+            const props = r.get('comment').properties;
+            return {
+                author: r.get('author'),
+                authorId: r.get('authorId'),
+                ...props,
+                likeCount: r.get('likeCount').toInt(),
+                replyCount: r.get('replyCount').toInt(),
+                
+                // Stored fact-check
+                truthScore: props.truthScore,
+                truthVerdict: props.truthVerdict,
+                truthExplanation: props.truthExplanation,
+                truthSources: props.truthSources
+            };
+        }));
     } catch (e) { res.status(500).json([]); }
     finally { await session.close(); }
 });
@@ -677,9 +1097,10 @@ app.post('/api/comments/:commentId/like', async (req, res) => {
             );
             res.json({ success: true, action: 'unliked' });
         } else {
-            await session.run(`
+            const createResult = await session.run(`
                 MATCH (u:User {id: $userId})
-                MATCH (c:Comment {id: $commentId})
+                MATCH (c:Comment {id: $commentId})<-[:OWNS_COMMENT]-(owner:User)
+                MATCH (c)-[:TARGETS*1..]->(p:Post)
                 CREATE (r:Reaction {
                     id: randomUUID(),
                     type: 'LIKE',
@@ -689,7 +1110,14 @@ app.post('/api/comments/:commentId/like', async (req, res) => {
                 CREATE (u)-[:OWNS_REACTION]->(r)
                 CREATE (r)-[:TARGETS]->(c)
                 CREATE (r)-[:HAS_REACTION]->(c)
+                RETURN owner.id as ownerId, p.id as postId
             `, { userId, commentId });
+            
+            if (createResult.records.length > 0) {
+                const ownerId = createResult.records[0].get('ownerId');
+                const postId = createResult.records[0].get('postId');
+                await sendNotification(session, 'like_comment', userId, ownerId, postId, commentId, "liked your comment");
+            }
             res.json({ success: true, action: 'liked' });
         }
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
@@ -698,18 +1126,80 @@ app.post('/api/comments/:commentId/like', async (req, res) => {
 
 app.post('/api/posts/comment', async (req, res) => {
     const { userId, postId, content } = req.body;
+
+    // Toxicity Check
+    if (content && content.trim().length > 0) {
+        try {
+            const aiRes = await callAI('/analyze/toxicity', { text: content });
+            if (aiRes.success && aiRes.result && aiRes.result.degree === 'extreme') {
+                return res.status(400).json({ 
+                    success: false, 
+                    message: "CONTENT_TOO_TOXIC",
+                    detail: "Your comment has been flagged as extremely toxic and cannot be published."
+                });
+            }
+        } catch (aiErr) {
+            console.warn("AI Toxicity check failed (skipping):", aiErr.message);
+        }
+    }
+
+    // --- NEW: Mandatory Fact-Check before publishing ---
+    let factCheckData = null;
+    try {
+        console.log(`[COMMENT] Running mandatory fact-check for user ${userId}...`);
+        const factCheckRes = await callAI('/analyze/verify', { 
+            text: content
+        });
+
+        if (factCheckRes.success) {
+            factCheckData = factCheckRes;
+            if (factCheckRes.truth_score < 0.3) {
+                return res.status(400).json({
+                    success: false,
+                    message: "CONTENT_UNVERIFIED",
+                    detail: factCheckRes.explanation,
+                    verdict: factCheckRes.verdict,
+                    truth_score: factCheckRes.truth_score
+                });
+            }
+        }
+    } catch (fcErr) {
+        console.warn("AI Fact-check failed (skipping):", fcErr.message);
+    }
+
     const session = driver.session();
     try {
         const result = await session.run(
-            `MATCH (u:User {id: $userId}), (p:Post {id: $postId})
-             CREATE (c:Comment {id: randomUUID(), content: $content, createdAt: timestamp()})
+            `MATCH (u:User {id: $userId}), (p:Post {id: $postId})<-[:OWNS_POST]-(owner:User)
+             CREATE (c:Comment {
+                id: randomUUID(), 
+                content: $content, 
+                createdAt: timestamp(),
+                // Store fact-check results
+                truthScore: $truthScore,
+                truthVerdict: $truthVerdict,
+                truthExplanation: $truthExplanation,
+                truthSources: $truthSources
+             })
              CREATE (u)-[:OWNS_COMMENT]->(c)
              CREATE (c)-[:TARGETS]->(p)
              CREATE (p)-[:HAS_COMMENT]->(c)
-             RETURN c`,
-            { userId, postId, content }
+             RETURN c, owner.id as ownerId`,
+            { 
+                userId, postId, content,
+                truthScore: factCheckData ? factCheckData.truth_score : null,
+                truthVerdict: factCheckData ? factCheckData.verdict : null,
+                truthExplanation: factCheckData ? factCheckData.explanation : null,
+                truthSources: factCheckData ? (factCheckData.sources || []) : []
+            }
         );
-        res.json({ success: true, comment: result.records[0].get('c').properties });
+        const comment = result.records[0].get('c').properties;
+        const ownerId = result.records[0].get('ownerId');
+        
+        await sendNotification(session, 'comment', userId, ownerId, postId, comment.id, "commented on your post");
+        analyzeAndStoreComment(comment.id, content); // fire and forget
+        
+        res.json({ success: true, comment });
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
     finally { await session.close(); }
 });
@@ -717,17 +1207,75 @@ app.post('/api/posts/comment', async (req, res) => {
 app.post('/api/comments/:commentId/reply', async (req, res) => {
     const { userId, content } = req.body;
     const { commentId } = req.params;
+
+    // Toxicity Check
+    if (content && content.trim().length > 0) {
+        try {
+            const aiRes = await callAI('/analyze/toxicity', { text: content });
+            if (aiRes.success && aiRes.result && aiRes.result.degree === 'extreme') {
+                return res.status(400).json({ 
+                    success: false, 
+                    message: "CONTENT_TOO_TOXIC",
+                    detail: "Your reply has been flagged as extremely toxic and cannot be published."
+                });
+            }
+        } catch (aiErr) {
+            console.warn("AI Toxicity check failed (skipping):", aiErr.message);
+        }
+    }
+
+    // --- NEW: Mandatory Fact-Check before publishing ---
+    let factCheckData = null;
+    try {
+        const factCheckRes = await callAI('/analyze/verify', { text: content });
+        if (factCheckRes.success) {
+            factCheckData = factCheckRes;
+            if (factCheckRes.truth_score < 0.3) {
+                return res.status(400).json({
+                    success: false,
+                    message: "CONTENT_UNVERIFIED",
+                    detail: factCheckRes.explanation
+                });
+            }
+        }
+    } catch (fcErr) {}
+
     const session = driver.session();
     try {
         const result = await session.run(
-            `MATCH (u:User {id: $userId}), (target:Comment {id: $commentId})
-             CREATE (reply:Comment {id: randomUUID(), content: $content, createdAt: timestamp()})
+            `MATCH (u:User {id: $userId})
+             MATCH (target:Comment {id: $commentId})<-[:OWNS_COMMENT]-(owner:User)
+             MATCH (target)-[:TARGETS*1..]->(p:Post)
+             CREATE (reply:Comment {
+                id: randomUUID(), 
+                content: $content, 
+                createdAt: timestamp(),
+                // Store fact-check results
+                truthScore: $truthScore,
+                truthVerdict: $truthVerdict,
+                truthExplanation: $truthExplanation,
+                truthSources: $truthSources
+             })
              CREATE (u)-[:OWNS_COMMENT]->(reply)
              CREATE (reply)-[:REPLIED_TO]->(target)
-             RETURN reply`,
-            { userId, commentId, content }
+             CREATE (reply)-[:TARGETS]->(p)
+             RETURN reply, owner.id as ownerId, p.id as postId`,
+            { 
+                userId, commentId, content,
+                truthScore: factCheckData ? factCheckData.truth_score : null,
+                truthVerdict: factCheckData ? factCheckData.verdict : null,
+                truthExplanation: factCheckData ? factCheckData.explanation : null,
+                truthSources: factCheckData ? (factCheckData.sources || []) : []
+            }
         );
-        res.json({ success: true, reply: result.records[0].get('reply').properties });
+        const reply = result.records[0].get('reply').properties;
+        const ownerId = result.records[0].get('ownerId');
+        const postId = result.records[0].get('postId');
+        
+        await sendNotification(session, 'reply', userId, ownerId, postId, reply.id, "replied to your comment");
+        analyzeAndStoreComment(reply.id, content); // fire and forget
+        
+        res.json({ success: true, reply });
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
     finally { await session.close(); }
 });
@@ -795,6 +1343,46 @@ app.delete('/api/comments/:commentId', async (req, res) => {
     finally { await session.close(); }
 });
 
+// --- NOTIFICATIONS ---
+
+app.get('/api/notifications/:userId', async (req, res) => {
+    const { userId } = req.params;
+    const session = driver.session();
+    try {
+        const result = await session.run(`
+            MATCH (n:Notification)-[:NOTIFIES]->(u:User {id: $userId})
+            MATCH (actor:User)-[:INITIATED_NOTIF]->(n)
+            OPTIONAL MATCH (actor)-[:HAS_PROFILE]->(p:Profile)
+            RETURN n.id as id, n.type as type, n.text as text, n.postId as postId, n.commentId as commentId, n.isRead as isRead, n.createdAt as createdAt, actor.username as actorUsername, p.avatar as actorAvatar, actor.id as actorId
+            ORDER BY n.createdAt DESC LIMIT 50
+        `, { userId });
+        
+        res.json(result.records.map(r => ({
+            id: r.get('id'),
+            type: r.get('type'),
+            text: r.get('text'),
+            postId: r.get('postId'),
+            commentId: r.get('commentId'),
+            isRead: r.get('isRead'),
+            createdAt: r.get('createdAt').toNumber(),
+            actorUsername: r.get('actorUsername'),
+            actorAvatar: r.get('actorAvatar'),
+            actorId: r.get('actorId')
+        })));
+    } catch (e) { res.status(500).json([]); }
+    finally { await session.close(); }
+});
+
+app.put('/api/notifications/:notifId/read', async (req, res) => {
+    const { notifId } = req.params;
+    const session = driver.session();
+    try {
+        await session.run(`MATCH (n:Notification {id: $notifId}) SET n.isRead = true`, { notifId });
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+    finally { await session.close(); }
+});
+
 // --- Admin
 
 // -- Users
@@ -806,6 +1394,8 @@ app.get('/api/admin/users', async (req, res) => {
             MATCH (u:User)-[:HAS_ROLE]->(r:Role {name: 'Member'})
             OPTIONAL MATCH (u)-[:HAS_PROFILE]->(p:Profile)
             OPTIONAL MATCH (u)-[:HAS_SANCTION]->(s:Sanction {status: 'ACTIVE'})
+            WITH u, r, p, s ORDER BY s.startDate DESC
+            WITH u, r, p, collect(s)[0] as latestSanction
             RETURN
                 u.id                AS id,
                 u.firstName         AS firstName,
@@ -817,10 +1407,10 @@ app.get('/api/admin/users', async (req, res) => {
                 r.name              AS role,
                 p.bio               AS bio,
                 p.avatar            AS avatar,
-                s.id                AS sanctionId,
-                s.type              AS sanctionType,
-                s.reason            AS sanctionReason,
-                s.endDate           AS sanctionEndDate
+                latestSanction.id   AS sanctionId,
+                latestSanction.type AS sanctionType,
+                latestSanction.reason AS sanctionReason,
+                latestSanction.endDate AS sanctionEndDate
         `);
 
         const users = result.records.map(record => {
@@ -876,21 +1466,27 @@ app.get('/api/admin/users', async (req, res) => {
 // Sanction corrigée avec les bons noms de champs
 app.put('/api/admin/users/:userId/suspend', async (req, res) => {
   const { userId } = req.params;
-  const { reason, durationDays, adminId } = req.body;
+  const { reason, durationDays, endDate: customEndDate, adminId } = req.body;
   const session = driver.session();
 
   const sanctionId = require('crypto').randomUUID();
   const startDate  = new Date().toISOString();
-  const endDate    = new Date(
-    Date.now() + durationDays * 24 * 60 * 60 * 1000
-  ).toISOString();
+  
+  let endDate;
+  if (customEndDate) {
+    endDate = new Date(customEndDate).toISOString();
+  } else {
+    endDate = new Date(
+      Date.now() + (durationDays || 1) * 24 * 60 * 60 * 1000
+    ).toISOString();
+  }
 
   try {
     await session.run(`
       MATCH (u:User {id: $userId})
       CREATE (s:Sanction {
         id:            $sanctionId,
-        type:          'SUSPENDED',
+        type:          'SUSPENSION',
         reason:        $reason,
         startDate:     $startDate,
         endDate:       $endDate,
@@ -1053,20 +1649,33 @@ app.put('/api/admin/users/:userId/deactivate', async (req, res) => {
 // ACTIVATE a user (reactivate)
 app.put('/api/admin/users/:userId/activate', async (req, res) => {
     const { userId } = req.params;
+    const { adminId } = req.body;
 
     const session = driver.session();
 
     try {
+        // 1. Reactivate user
         await session.run(
             `MATCH (u:User {id: $userId})
-             SET u.status = 'ACTIVE'
+             SET u.status = 'ACTIVE',
+                 u.activeSanctionId = null
              RETURN u`,
             { userId }
         );
 
+        // 2. Revoke any active sanctions
+        await session.run(
+            `MATCH (u:User {id: $userId})-[:HAS_SANCTION]->(s:Sanction {status: 'ACTIVE'})
+             SET s.status = 'REVOKED',
+                 s.revokedAt = timestamp(),
+                 s.revokedBy = $adminId
+             RETURN s`,
+            { userId, adminId: adminId || 'SYSTEM' }
+        );
+
         res.json({
             success: true,
-            message: "User activated successfully"
+            message: "User activated successfully and sanctions revoked"
         });
 
     } catch (error) {
@@ -1158,7 +1767,7 @@ async function autoLiftExpiredSuspensions() {
 
         const expired = await session.run(`
             MATCH (s:Sanction {type: 'SUSPENSION', status: 'ACTIVE'})
-            WHERE s.endDate < datetime($now)
+            WHERE s.endDate < $now
             RETURN s.id as sanctionId
         `, { now });
 
@@ -1207,10 +1816,14 @@ app.get('/api/admin/moderators', async (req, res) => {
             RETURN u, r.name as role
         `);
 
-        const moderators = result.records.map(r => ({
-            ...r.get('u').properties,
-            role: r.get('role')
-        }));
+        const moderators = result.records.map(r => {
+            const props = r.get('u').properties;
+            return {
+                ...props,
+                name: `${props.firstName || ''} ${props.lastName || ''}`.trim(),
+                role: r.get('role')
+            };
+        });
 
         res.json(moderators);
 
@@ -1223,7 +1836,18 @@ app.get('/api/admin/moderators', async (req, res) => {
 
 // add moderator
 app.post('/api/admin/moderators', async (req, res) => {
-    const { firstName, lastName, username, email, password, status } = req.body;
+    let { firstName, lastName, name, username, email, password, status } = req.body;
+
+    // Handle 'name' from frontend if firstName/lastName are missing
+    if (name && !firstName) {
+        const parts = name.trim().split(/\s+/);
+        firstName = parts[0];
+        lastName = parts.slice(1).join(' ');
+    }
+
+    firstName = firstName || 'Moderator';
+    lastName = lastName || '';
+    status = status || 'ACTIVE';
 
     // Username validation: Alphanumeric only
     const usernameRegex = /^[a-zA-Z0-9]+$/;
@@ -1263,10 +1887,11 @@ app.post('/api/admin/moderators', async (req, res) => {
 
         const hashedPassword = await bcrypt.hash(password, 10);
 
+        const id = require('crypto').randomUUID();
         await session.run(`
             MERGE (r:Role {name: "Moderator"})
             CREATE (u:User:AuthenticatedUser:Moderator {
-                id:               randomUUID(),
+                id:               $id,
                 firstName:        $firstName,
                 lastName:         $lastName,
                 username:         $username,
@@ -1278,7 +1903,11 @@ app.post('/api/admin/moderators', async (req, res) => {
             CREATE (u)-[:HAS_ROLE]->(r)
             RETURN u
         `, {
-            firstName, lastName, username, email,
+            id,
+            firstName,
+            lastName,
+            username,
+            email,
             hashedPassword,
             status
         });
@@ -1286,7 +1915,8 @@ app.post('/api/admin/moderators', async (req, res) => {
         res.json({ success: true });
 
     } catch (e) {
-        res.status(500).json({ success: false });
+        console.error("Add moderator error:", e);
+        res.status(500).json({ success: false, message: e.message });
     } finally {
         await session.close();
     }
@@ -1294,7 +1924,18 @@ app.post('/api/admin/moderators', async (req, res) => {
 
 app.put('/api/admin/moderators/:id', async (req, res) => {
     const { id } = req.params;
-    const { firstName, lastName, username, email, status, role } = req.body;
+    let { firstName, lastName, name, username, email, status, role } = req.body;
+
+    // Handle 'name' from frontend if firstName/lastName are missing
+    if (name && !firstName) {
+        const parts = name.trim().split(/\s+/);
+        firstName = parts[0];
+        lastName = parts.slice(1).join(' ');
+    }
+
+    firstName = firstName || 'Moderator';
+    lastName = lastName || '';
+    status = status || 'ACTIVE';
 
     const session = driver.session();
 
@@ -1393,6 +2034,8 @@ app.post('/api/admin/roles', async (req, res) => {
     `, { name, description });
 
     res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
   } finally {
     await session.close();
   }
@@ -1405,9 +2048,14 @@ app.delete('/api/admin/roles/:id', async (req, res) => {
   try {
     // Vérifier si des utilisateurs ont ce rôle
     const check = await session.run(`
-      MATCH (u:User)-[:HAS_ROLE]->(r:Role {id: $id})
+      MATCH (r:Role {id: $id})
+      OPTIONAL MATCH (u:User)-[:HAS_ROLE]->(r)
       RETURN count(u) as userCount, r.name as roleName
     `, { id });
+
+    if (check.records.length === 0) {
+      return res.status(404).json({ success: false, message: 'Role not found' });
+    }
 
     const userCount = check.records[0].get('userCount').toInt();
     const roleName  = check.records[0].get('roleName');
@@ -1460,15 +2108,187 @@ app.get('/api/admin/roles', async (req, res) => {
   try {
     const result = await session.run(`MATCH (r:Role) RETURN r`);
 
-    const roles = result.records.map(r => ({
-      id: r.get('r').identity.toString(),
-      ...r.get('r').properties
-    }));
+    const roles = result.records.map(r => {
+      const props = r.get('r').properties;
+      return {
+        id: props.id, // property id (UUID)
+        ...props
+      };
+    });
 
     res.json(roles);
   } finally {
     await session.close();
   }
+});
+
+// ==========================================
+// REPORTING SYSTEM (POSTS / COMMENTS)
+// ==========================================
+const { v4: uuidv4 } = require('uuid');
+
+app.post('/api/reports', async (req, res) => {
+  const { reporterId, targetId, targetType, reason } = req.body;
+  const session = driver.session();
+  try {
+    const timestamp = Date.now();
+    const reportId = uuidv4();
+    let query = '';
+
+    if (targetType === 'Post') {
+      query = `
+        MATCH (u:User {id: $reporterId})
+        MATCH (p:Post {id: $targetId})
+        CREATE (u)-[r:REPORTED { id: $reportId, reason: $reason, timestamp: $timestamp, status: 'pending' }]->(p)
+        RETURN r
+      `;
+    } else if (targetType === 'Comment') {
+      query = `
+        MATCH (u:User {id: $reporterId})
+        MATCH (c:Comment {id: $targetId})
+        CREATE (u)-[r:REPORTED { id: $reportId, reason: $reason, timestamp: $timestamp, status: 'pending' }]->(c)
+        RETURN r
+      `;
+    } else {
+      return res.status(400).json({ success: false, message: 'Invalid targetType' });
+    }
+
+    const result = await session.run(query, { reporterId, targetId, reason, timestamp, reportId });
+    if (result.records.length === 0) {
+        return res.status(404).json({ success: false, message: 'Target or Reporter not found' });
+    }
+    res.json({ success: true, message: 'Report submitted successfully' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  } finally {
+    await session.close();
+  }
+});
+
+app.get('/api/admin/reports', async (req, res) => {
+  const session = driver.session();
+  try {
+    const query = `
+      MATCH (u:User)-[r:REPORTED]->(target)
+      WHERE r.status = 'pending'
+      OPTIONAL MATCH (target)<-[:OWNS_POST|OWNS_COMMENT]-(author:User)
+      RETURN
+        r.id as id,
+        u.id as reporterId,
+        u.username as reporterName,
+        target.id as targetId,
+        labels(target)[0] as targetType,
+        target.content as targetContent,
+        author.id as authorId,
+        author.username as authorName,
+        r.reason as reason,
+        r.timestamp as timestamp
+      ORDER BY r.timestamp DESC
+    `;
+    const result = await session.run(query);
+    const reports = result.records.map(record => ({
+      id: record.get('id'),
+      reporterId: record.get('reporterId'),
+      reporterName: record.get('reporterName'),
+      targetId: record.get('targetId'),
+      targetType: record.get('targetType'),
+      targetContent: record.get('targetContent') || "",
+      authorId: record.get('authorId') || null,
+      authorName: record.get('authorName') || 'Unknown',
+      reason: record.get('reason') || 'No reason',
+      timestamp: record.get('timestamp') ? (typeof record.get('timestamp').toNumber === 'function' ? record.get('timestamp').toNumber() : record.get('timestamp')) : Date.now()
+    }));
+    res.json(reports);
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  } finally {
+    await session.close();
+  }
+});
+
+app.put('/api/admin/reports/:reportId/resolve', async (req, res) => {
+  const { reportId } = req.params;
+  const { action, adminId, customReason } = req.body; // 'dismiss' or 'delete'
+  const session = driver.session();
+  try {
+    if (action === 'delete') {
+      const findQuery = `
+        MATCH ()-[r:REPORTED {id: $reportId}]->(target)
+        OPTIONAL MATCH (target)<-[:OWNS_POST|OWNS_COMMENT]-(owner:User)
+        RETURN target.id as targetId, labels(target)[0] as type, owner.id as ownerId
+      `;
+      const findRes = await session.run(findQuery, { reportId });
+      
+      if (findRes.records.length > 0) {
+          const targetId = findRes.records[0].get('targetId');
+          const ownerId = findRes.records[0].get('ownerId');
+          const type = findRes.records[0].get('type');
+          
+          if (ownerId && adminId) {
+             const contentType = type === 'Post' ? "your post" : "your comment";
+             const defaultMessage = `The moderator has deleted ${contentType} because it does not respect the application's rules.`;
+             const notifText = customReason ? `${defaultMessage} Reason: ${customReason}` : defaultMessage;
+
+             await sendNotification(
+                 session, 
+                 'system_alert', 
+                 adminId, 
+                 ownerId, 
+                 type === 'Post' ? targetId : null, 
+                 type === 'Comment' ? targetId : null, 
+                 notifText
+             );
+          }
+          
+          await session.run(`MATCH (target) WHERE target.id = $targetId DETACH DELETE target`, { targetId });
+      }
+      res.json({ success: true, message: 'Report resolved and target deleted' });
+    } else {
+      const dismissQuery = `
+        MATCH ()-[r:REPORTED {id: $reportId}]->()
+        SET r.status = 'resolved'
+      `;
+      await session.run(dismissQuery, { reportId });
+      res.json({ success: true, message: 'Report dismissed' });
+    }
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  } finally {
+    await session.close();
+  }
+});
+
+app.post('/api/admin/reports/:reportId/analyze', async (req, res) => {
+    const { reportId } = req.params;
+    console.log(`[ADMIN] Analyzing report: ${reportId}`);
+    const session = driver.session();
+    try {
+        const findRes = await session.run(
+            `MATCH ()-[r:REPORTED {id: $reportId}]->(target)
+             RETURN target.id as id, target.content as content, labels(target)[0] as type`,
+            { reportId }
+        );
+
+        if (findRes.records.length === 0) {
+            console.warn(`[ADMIN] Report not found: ${reportId}`);
+            return res.status(404).json({ success: false, message: 'Target not found' });
+        }
+
+        const content = findRes.records[0].get('content');
+        if (!content || content.trim() === "") {
+            console.warn(`[ADMIN] No content for target in report: ${reportId}`);
+            return res.status(400).json({ success: false, message: 'No text content to analyze' });
+        }
+
+        console.log(`[ADMIN] Calling AI for content: "${content.substring(0, 50)}..."`);
+        const aiResult = await callAI('/analyze/full', { text: content });
+        res.json({ success: true, analysis: aiResult });
+    } catch(e) {
+        console.error(`[ADMIN] Analysis error for report ${reportId}:`, e.message);
+        res.status(500).json({ success: false, message: e.message });
+    } finally {
+        await session.close();
+    }
 });
 
 //global metrics
@@ -1480,7 +2300,7 @@ app.get('/api/admin/stats/posts-per-day', async (req, res) => {
     try {
         const result = await session.run(`
             MATCH (p:Post)
-            RETURN date(datetime({epochMillis: p.timestamp})) as day,
+            RETURN date(datetime({epochMillis: p.createdAt})) as day,
                    count(p) as count
             ORDER BY day
         `);
@@ -1527,6 +2347,56 @@ app.post('/api/ai/analyze/comment', async (req, res) => {
     } catch (e) {
         console.error('AI analyze/comment error:', e.message);
         res.status(503).json({ success: false, message: 'AI service unavailable' });
+    }
+});
+
+// ── POST /api/ai/verify ──────────────────────────────────────────────────────
+// Verify a claim using Gemini (called on demand from the UI)
+app.post('/api/ai/verify', async (req, res) => {
+    const { text, imageUrl, isVideo, postId, commentId } = req.body;
+    if (!text && !imageUrl) return res.status(400).json({ success: false, message: 'content is required' });
+
+    const session = driver.session();
+    try {
+        // 1. Check if we have a stored fact-check for this post/comment
+        if (postId || commentId) {
+            const id = postId || commentId;
+            const label = postId ? 'Post' : 'Comment';
+            const checkRes = await session.run(
+                `MATCH (n:${label} {id: $id}) 
+                 RETURN n.truthScore as truthScore, n.truthVerdict as truthVerdict, 
+                        n.truthExplanation as truthExplanation, n.truthSources as truthSources`,
+                { id }
+            );
+
+            if (checkRes.records.length > 0) {
+                const record = checkRes.records[0];
+                const truthScore = record.get('truthScore');
+                if (truthScore !== null) {
+                    console.log(`[AI] Returning cached fact-check for ${label} ${id}`);
+                    return res.json({
+                        success: true,
+                        truth_score: truthScore,
+                        verdict: record.get('truthVerdict'),
+                        explanation: record.get('truthExplanation'),
+                        sources: record.get('truthSources')
+                    });
+                }
+            }
+        }
+
+        // 2. If no cache, call AI
+        const result = await callAI('/analyze/verify', { 
+            text: text || "[IMAGE_ONLY_POST]", 
+            image_url: imageUrl, 
+            is_video: isVideo || false 
+        });
+        res.json(result);
+    } catch (e) {
+        console.error('AI verify error:', e.message);
+        res.status(503).json({ success: false, message: 'AI service unavailable' });
+    } finally {
+        await session.close();
     }
 });
 
@@ -1681,4 +2551,4 @@ app.get('/api/ai/health', async (req, res) => {
 
 
 
-app.listen(3000, () => console.log('Backend listening on port 3000'));
+server.listen(3000, () => console.log('Backend listening on port 3000'));

@@ -11,6 +11,10 @@ class AppTheme {
   static const Color black = Color(0xFF000000);
   static const Color white = Color(0xFFFFFFFF);
 
+  static const Color primary = peach;
+  static Color surface = white.withOpacity(0.1);
+  static Color glassBorder = white.withOpacity(0.2);
+
   static ThemeData get darkTheme {
     return ThemeData(
       useMaterial3: true,

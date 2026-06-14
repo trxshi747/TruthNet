@@ -5,10 +5,14 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:model2/providers/auth_provider.dart';
+import 'package:model2/providers/notification_provider.dart';
 import 'package:model2/services/api_service.dart';
-import 'package:model2/widgets/dynamic_background.dart';
-import 'package:model2/widgets/custom_floating_nav_bar.dart';
 import 'package:model2/screens/profile_screen.dart';
+import 'package:model2/screens/post_screen.dart';
+import 'package:model2/screens/notifications_screen.dart';
+import 'package:model2/screens/profile_screen.dart';
+import 'package:model2/screens/message_screen.dart';
+import 'package:model2/screens/chat_screen.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'package:model2/widgets/video_player_widget.dart';
@@ -43,12 +47,12 @@ class TaggingTextEditingController extends TextEditingController {
   }
 }
 
-class HomeScreen extends StatefulWidget {
+class FeedScreen extends StatefulWidget {
   @override
-  _HomeScreenState createState() => _HomeScreenState();
+  _FeedScreenState createState() => _FeedScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _FeedScreenState extends State<FeedScreen> {
   int _selectedIndex = 0;
   List<dynamic> _posts = [];
   bool _isLoading = true;
@@ -106,15 +110,19 @@ class _HomeScreenState extends State<HomeScreen> {
 
     // Optimistic UI update
     setState(() {
-      final index = _posts.indexWhere((p) => p['id'] == postId);
-      if (index != -1) {
-        _posts[index]['isSaved'] = !(_posts[index]['isSaved'] ?? false);
+      void updatePostStatus(dynamic post) {
+        post['isSaved'] = !(post['isSaved'] ?? false);
       }
+      
+      final index = _posts.indexWhere((p) => p['id'] == postId);
+      if (index != -1) updatePostStatus(_posts[index]);
+
+      final searchIndex = _postSearchResults.indexWhere((p) => p['id'] == postId);
+      if (searchIndex != -1) updatePostStatus(_postSearchResults[searchIndex]);
     });
 
     final success = await ApiService.savePost(authProvider.user!.id, postId);
     if (success) {
-      _fetchFeed(showLoading: false); 
       _showFeedback("TRANSMISSION_STATUS_UPDATED");
     } else {
       _fetchFeed();
@@ -132,14 +140,18 @@ class _HomeScreenState extends State<HomeScreen> {
       if (authProvider.user != null) {
         // Optimistic UI update
         setState(() {
-          final index = _posts.indexWhere((p) => p['id'] == postId);
-          if (index != -1) {
-            _posts[index]['shareCount'] = (_posts[index]['shareCount'] ?? 0) + 1;
+          void updatePostStatus(dynamic post) {
+            post['shareCount'] = (post['shareCount'] ?? 0) + 1;
           }
+
+          final index = _posts.indexWhere((p) => p['id'] == postId);
+          if (index != -1) updatePostStatus(_posts[index]);
+
+          final searchIndex = _postSearchResults.indexWhere((p) => p['id'] == postId);
+          if (searchIndex != -1) updatePostStatus(_postSearchResults[searchIndex]);
         });
 
         await ApiService.sharePost(authProvider.user!.id, postId);
-        _fetchFeed(showLoading: false);
       }
     } catch (e) {
       debugPrint("DEBUG: SHARE_ERROR: $e");
@@ -231,8 +243,14 @@ class _HomeScreenState extends State<HomeScreen> {
                                   children: [
                                     Row(
                                       children: [
-                                        Text("@${comment['author'] ?? "ANON"}", 
-                                          style: GoogleFonts.spaceMono(color: AppTheme.coral, fontWeight: FontWeight.bold, fontSize: 12)),
+                                        InkWell(
+                                          onTap: () {
+                                            Navigator.pop(context); // Close bottom sheet
+                                            Navigator.push(context, MaterialPageRoute(builder: (context) => ProfileScreen(targetUserId: authorId)));
+                                          },
+                                          child: Text("@${comment['author'] ?? "ANON"}", 
+                                            style: GoogleFonts.spaceMono(color: AppTheme.coral, fontWeight: FontWeight.bold, fontSize: 12)),
+                                        ),
                                         const Spacer(),
                                         _buildSmallAction(Icons.favorite_rounded, "${comment['likeCount'] ?? 0}", AppTheme.coral, () async {
                                           if (auth.user != null) {
@@ -253,33 +271,34 @@ class _HomeScreenState extends State<HomeScreen> {
                                             }
                                           });
                                         }),
-                                        if (isOwner) ...[
-                                          const SizedBox(width: 5),
-                                          PopupMenuButton<String>(
-                                            icon: const Icon(Icons.more_vert_rounded, size: 14, color: Colors.white24),
-                                            padding: EdgeInsets.zero,
-                                            constraints: const BoxConstraints(minWidth: 80),
-                                            color: AppTheme.mediumPurple,
-                                            onSelected: (val) {
-                                              if (val == 'edit') {
-                                                _showEditCommentDialog(commentId, comment['content'], () async {
-                                                  final updated = await ApiService.getComments(postId);
-                                                  setModalState(() => _comments = updated);
-                                                });
-                                              } else if (val == 'delete') {
-                                                _handleDeleteComment(commentId, () async {
-                                                  final updated = await ApiService.getComments(postId);
-                                                  setModalState(() => _comments = updated);
-                                                  _fetchFeed();
-                                                });
-                                              }
-                                            },
-                                            itemBuilder: (context) => [
-                                              PopupMenuItem(value: 'edit', child: Text("EDIT", style: GoogleFonts.spaceMono(fontSize: 10, color: Colors.white))),
-                                              PopupMenuItem(value: 'delete', child: Text("DELETE", style: GoogleFonts.spaceMono(fontSize: 10, color: AppTheme.coral))),
-                                            ],
-                                          ),
-                                        ],
+                                        const SizedBox(width: 5),
+                                        PopupMenuButton<String>(
+                                          icon: const Icon(Icons.more_vert_rounded, size: 14, color: Colors.white24),
+                                          padding: EdgeInsets.zero,
+                                          constraints: const BoxConstraints(minWidth: 80),
+                                          color: AppTheme.mediumPurple,
+                                          onSelected: (val) {
+                                            if (val == 'edit') {
+                                              _showEditCommentDialog(commentId, comment['content'], () async {
+                                                final updated = await ApiService.getComments(postId);
+                                                setModalState(() => _comments = updated);
+                                              });
+                                            } else if (val == 'delete') {
+                                              _handleDeleteComment(commentId, () async {
+                                                final updated = await ApiService.getComments(postId);
+                                                setModalState(() => _comments = updated);
+                                                _fetchFeed();
+                                              });
+                                            } else if (val == 'report') {
+                                              _showReportDialog(commentId, 'Comment');
+                                            }
+                                          },
+                                          itemBuilder: (context) => [
+                                            if (isOwner) PopupMenuItem(value: 'edit', child: Text("EDIT", style: GoogleFonts.spaceMono(fontSize: 10, color: Colors.white))),
+                                            if (isOwner) PopupMenuItem(value: 'delete', child: Text("DELETE", style: GoogleFonts.spaceMono(fontSize: 10, color: AppTheme.coral))),
+                                            if (!isOwner) PopupMenuItem(value: 'report', child: Text("REPORT", style: GoogleFonts.spaceMono(fontSize: 10, color: AppTheme.coral))),
+                                          ],
+                                        ),
                                       ],
                                     ),
                                     _buildRichText(comment['content'] ?? "", fontSize: 13),
@@ -312,7 +331,13 @@ class _HomeScreenState extends State<HomeScreen> {
                                                    children: [
                                                      Row(
                                                        children: [
-                                                         Text("@${reply['author'] ?? "ANON"}", style: GoogleFonts.spaceMono(color: AppTheme.coral, fontSize: 11, fontWeight: FontWeight.bold)),
+                                                         InkWell(
+                                                           onTap: () {
+                                                             Navigator.pop(context); // Close bottom sheet
+                                                             Navigator.push(context, MaterialPageRoute(builder: (context) => ProfileScreen(targetUserId: reply['authorId'])));
+                                                           },
+                                                           child: Text("@${reply['author'] ?? "ANON"}", style: GoogleFonts.spaceMono(color: AppTheme.coral, fontSize: 11, fontWeight: FontWeight.bold)),
+                                                         ),
                                                          const Spacer(),
                                                          _buildSmallAction(Icons.favorite_rounded, "${reply['likeCount'] ?? 0}", AppTheme.coral, () async {
                                                            if (auth.user != null) {
@@ -333,34 +358,35 @@ class _HomeScreenState extends State<HomeScreen> {
                                                              }
                                                            });
                                                          }),
-                                                         if (isReplyOwner) ...[
-                                                           const SizedBox(width: 5),
-                                                           PopupMenuButton<String>(
-                                                              icon: const Icon(Icons.more_vert_rounded, size: 12, color: Colors.white24),
-                                                              padding: EdgeInsets.zero,
-                                                              constraints: const BoxConstraints(minWidth: 80),
-                                                              color: AppTheme.mediumPurple,
-                                                              onSelected: (val) {
-                                                                if (val == 'edit') {
-                                                                  _showEditCommentDialog(reply['id'], reply['content'], () async {
-                                                                    final updatedReplies = await ApiService.getReplies(commentId);
-                                                                    setModalState(() => _repliesMap[commentId] = updatedReplies);
-                                                                  });
-                                                                } else if (val == 'delete') {
-                                                                  _handleDeleteComment(reply['id'], () async {
-                                                                    final updatedReplies = await ApiService.getReplies(commentId);
-                                                                    setModalState(() => _repliesMap[commentId] = updatedReplies);
-                                                                    final updatedComments = await ApiService.getComments(postId);
-                                                                    setModalState(() => _comments = updatedComments);
-                                                                  });
-                                                                }
-                                                              },
-                                                              itemBuilder: (context) => [
-                                                                PopupMenuItem(value: 'edit', child: Text("EDIT", style: GoogleFonts.spaceMono(fontSize: 10, color: Colors.white))),
-                                                                PopupMenuItem(value: 'delete', child: Text("DELETE", style: GoogleFonts.spaceMono(fontSize: 10, color: AppTheme.coral))),
-                                                              ],
-                                                            ),
-                                                         ],
+                                                         const SizedBox(width: 5),
+                                                         PopupMenuButton<String>(
+                                                             icon: const Icon(Icons.more_vert_rounded, size: 12, color: Colors.white24),
+                                                             padding: EdgeInsets.zero,
+                                                             constraints: const BoxConstraints(minWidth: 80),
+                                                             color: AppTheme.mediumPurple,
+                                                             onSelected: (val) {
+                                                               if (val == 'edit') {
+                                                                 _showEditCommentDialog(reply['id'], reply['content'], () async {
+                                                                   final updatedReplies = await ApiService.getReplies(commentId);
+                                                                   setModalState(() => _repliesMap[commentId] = updatedReplies);
+                                                                 });
+                                                               } else if (val == 'delete') {
+                                                                 _handleDeleteComment(reply['id'], () async {
+                                                                   final updatedReplies = await ApiService.getReplies(commentId);
+                                                                   setModalState(() => _repliesMap[commentId] = updatedReplies);
+                                                                   final updatedComments = await ApiService.getComments(postId);
+                                                                   setModalState(() => _comments = updatedComments);
+                                                                 });
+                                                               } else if (val == 'report') {
+                                                                 _showReportDialog(reply['id'], 'Comment');
+                                                               }
+                                                             },
+                                                             itemBuilder: (context) => [
+                                                               if (isReplyOwner) PopupMenuItem(value: 'edit', child: Text("EDIT", style: GoogleFonts.spaceMono(fontSize: 10, color: Colors.white))),
+                                                               if (isReplyOwner) PopupMenuItem(value: 'delete', child: Text("DELETE", style: GoogleFonts.spaceMono(fontSize: 10, color: AppTheme.coral))),
+                                                               if (!isReplyOwner) PopupMenuItem(value: 'report', child: Text("REPORT", style: GoogleFonts.spaceMono(fontSize: 10, color: AppTheme.coral))),
+                                                             ],
+                                                           ),
                                                        ],
                                                      ),
                                                      _buildRichText(reply['content'] ?? "", fontSize: 12, defaultColor: Colors.white70),
@@ -470,22 +496,26 @@ class _HomeScreenState extends State<HomeScreen> {
                             if (_commentController.text.trim().isEmpty) return;
                             final auth = Provider.of<AuthProvider>(context, listen: false);
                             if (auth.user != null) {
-                              bool success;
+                              Map<String, dynamic> result;
                               if (_replyToId == null) {
-                                success = await ApiService.addComment(auth.user!.id, postId, _commentController.text.trim());
+                                result = await ApiService.addComment(auth.user!.id, postId, _commentController.text.trim());
                               } else {
-                                success = await ApiService.replyToComment(auth.user!.id, _replyToId!, _commentController.text.trim());
+                                result = await ApiService.replyToComment(auth.user!.id, _replyToId!, _commentController.text.trim());
                               }
 
-                              if (success) {
+                              if (result['success'] == true) {
                                 final newComments = await ApiService.getComments(postId);
                                 setModalState(() {
                                   _comments = newComments;
                                   _commentController.clear();
                                   _replyToId = null;
-                                  _repliesMap.clear(); 
+                                  _repliesMap.clear();
                                 });
                                 _fetchFeed(showLoading: false);
+                              } else if (result['message'] == 'CONTENT_TOO_TOXIC') {
+                                  _showToxicityAlert(result['detail'] ?? "Your response is too toxic to be published.");
+                              } else {
+                                  _showFeedback(result['message'] ?? "COMMENT_FAILED");
                               }
                             } else {
                               _showFeedback("LOGIN_REQUIRED_TO_COMMENT");
@@ -587,6 +617,98 @@ class _HomeScreenState extends State<HomeScreen> {
         _showFeedback("ERASE_FAILED_UNAUTHORIZED");
       }
     }
+  }
+
+  void _showReportDialog(String targetId, String targetType) {
+    String selectedReason = 'Spam';
+    final List<String> reasons = ['Spam', 'Harassment', 'Hate Speech', 'False Information', 'Other'];
+    final TextEditingController _otherReasonController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: AppTheme.mediumPurple.withOpacity(0.95),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+                side: BorderSide(color: AppTheme.peach.withOpacity(0.5)),
+              ),
+              title: Text("REPORT_$targetType".toUpperCase(), style: GoogleFonts.righteous(color: AppTheme.peach)),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text("Please select a reason:", style: GoogleFonts.spaceMono(color: Colors.white)),
+                    const SizedBox(height: 10),
+                    ...reasons.map((reason) => RadioListTile<String>(
+                          title: Text(reason, style: GoogleFonts.spaceMono(color: Colors.white70)),
+                          value: reason,
+                          groupValue: selectedReason,
+                          activeColor: AppTheme.peach,
+                          onChanged: (val) {
+                            if (val != null) setDialogState(() => selectedReason = val);
+                          },
+                        )),
+                    if (selectedReason == 'Other') ...[
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: _otherReasonController,
+                        style: GoogleFonts.spaceMono(color: Colors.white),
+                        decoration: InputDecoration(
+                          hintText: "Specify the reason...",
+                          hintStyle: GoogleFonts.spaceMono(color: Colors.white24),
+                          enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
+                          focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: AppTheme.peach)),
+                        ),
+                      ),
+                    ]
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text("CANCEL", style: GoogleFonts.spaceMono(color: Colors.white54)),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.coral,
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: () async {
+                    String finalReason = selectedReason;
+                    if (selectedReason == 'Other') {
+                      if (_otherReasonController.text.trim().isEmpty) {
+                         _showFeedback("PLEASE_SPECIFY_REASON");
+                         return;
+                      }
+                      finalReason = "Other: ${_otherReasonController.text.trim()}";
+                    }
+
+                    final auth = Provider.of<AuthProvider>(context, listen: false);
+                    final success = await ApiService.reportItem(
+                      reporterId: auth.user!.id,
+                      targetId: targetId,
+                      targetType: targetType,
+                      reason: finalReason,
+                    );
+                    Navigator.pop(context);
+                    if (success) {
+                      _showFeedback("REPORT_SUBMITTED");
+                    } else {
+                      _showFeedback("REPORT_FAILED");
+                    }
+                  },
+                  child: Text("SUBMIT", style: GoogleFonts.spaceMono(fontWeight: FontWeight.bold)),
+                ),
+              ],
+            );
+          }
+        );
+      },
+    );
   }
 
   void _showEditDialog(String postId, String currentContent) {
@@ -707,15 +829,43 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  void _showToxicityAlert(String detail) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.darkPurple,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: const BorderSide(color: AppTheme.coral, width: 2),
+        ),
+        title: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded, color: AppTheme.coral),
+            const SizedBox(width: 10),
+            Text("CONTENT_BLOCKED", style: GoogleFonts.righteous(color: AppTheme.coral)),
+          ],
+        ),
+        content: Text(
+          detail,
+          style: GoogleFonts.spaceMono(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text("UNDERSTOOD", style: GoogleFonts.spaceMono(color: AppTheme.peach, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
     final role = authProvider.role;
-    final List<Map<String, dynamic>> navItems = _getNavItems(role);
 
     return Scaffold(
-      extendBodyBehindAppBar: true,
-      extendBody: true, // Needed for floating nav bar
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -738,15 +888,54 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         actions: [
+          if (role != UserRole.guest)
+            Consumer<NotificationProvider>(
+              builder: (context, notifProvider, child) {
+                return Stack(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.notifications_rounded, color: AppTheme.peach),
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => const NotificationsScreen()),
+                        );
+                      },
+                    ),
+                    if (notifProvider.unreadCount > 0)
+                      Positioned(
+                        right: 8,
+                        top: 8,
+                        child: Container(
+                          padding: const EdgeInsets.all(2),
+                          decoration: BoxDecoration(
+                            color: AppTheme.coral,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          constraints: const BoxConstraints(
+                            minWidth: 16,
+                            minHeight: 16,
+                          ),
+                          child: Text(
+                            '${notifProvider.unreadCount}',
+                            style: GoogleFonts.spaceMono(
+                              color: Colors.white,
+                              fontSize: 10,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ),
+                  ],
+                );
+              },
+            ),
           IconButton(
-            icon: const Icon(Icons.refresh_rounded, color: AppTheme.peach), // Neon Yellow
-            onPressed: () {
-              _fetchFeed();
-              if (_selectedIndex == 3) profileKey.currentState?.fetchProfile();
-            },
+            icon: const Icon(Icons.refresh_rounded, color: AppTheme.peach),
+            onPressed: () => _fetchFeed(),
           ),
           IconButton(
-            icon: Icon(role == UserRole.guest ? Icons.login_rounded : Icons.logout_rounded, color: AppTheme.coral), // Magenta
+            icon: Icon(role == UserRole.guest ? Icons.login_rounded : Icons.logout_rounded, color: AppTheme.coral),
             onPressed: () {
               authProvider.logout();
               Navigator.pushReplacementNamed(context, '/');
@@ -754,25 +943,14 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-      body: DynamicBackground(
-        child: _buildBody(_selectedIndex, role),
-      ),
-      bottomNavigationBar: CustomFloatingNavBar(
-        currentIndex: _selectedIndex,
-        items: navItems,
-        onTap: (index) => setState(() => _selectedIndex = index),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-      floatingActionButton: role == UserRole.member || role == UserRole.admin
+      body: _isLoading ? _buildShimmerFeed() : _buildFeed(),
+      floatingActionButton: (role == UserRole.member || role == UserRole.admin)
           ? Padding(
-              padding: const EdgeInsets.only(bottom: 90.0), // Above the custom nav bar
+              padding: const EdgeInsets.only(bottom: 90.0),
               child: FloatingActionButton(
                 onPressed: () async {
                   final result = await Navigator.pushNamed(context, '/post');
-                  if (result == true) {
-                    _fetchFeed();
-                    if (_selectedIndex == 3) profileKey.currentState?.fetchProfile();
-                  }
+                  if (result == true) _fetchFeed();
                 },
                 child: const Icon(Icons.add_rounded, color: AppTheme.darkPurple),
                 backgroundColor: AppTheme.peach,
@@ -789,7 +967,7 @@ class _HomeScreenState extends State<HomeScreen> {
       {'icon': Icons.search_rounded, 'label': 'Search'},
     ];
     if (role != UserRole.guest) {
-      items.add({'icon': Icons.chat_bubble_rounded, 'label': 'Comms'});
+      items.add({'icon': Icons.chat_bubble_rounded, 'label': 'Messages'});
       items.add({'icon': Icons.person_rounded, 'label': 'Profile'});
     }
     if (role == UserRole.moderator || role == UserRole.admin) {
@@ -806,12 +984,191 @@ class _HomeScreenState extends State<HomeScreen> {
       case 0:
         return _isLoading ? _buildShimmerFeed() : _buildFeed();
       case 1:
-        return Center(child: Text('SEARCH_DATABASE...', style: GoogleFonts.spaceMono(color: AppTheme.coral)));
+        return _buildSearchScreen();
+      case 2:
+        return (role != UserRole.guest) ? _buildMessagesScreen() : Center(child: Text('LOGIN_REQUIRED_FOR_COMMS', style: GoogleFonts.spaceMono(color: AppTheme.coral)));
       case 3:
+        if (role == UserRole.guest) return Center(child: Text('LOGIN_REQUIRED', style: GoogleFonts.spaceMono(color: AppTheme.coral)));
+        // Note: For UserRole.admin or UserRole.moderator, their profile index might be shifted
+        // CustomFloatingNavBar might return 3 for Profile, but for Admins index 3 is Mod and 4 is Admin? 
+        // Wait, _getNavItems assigns labels. We should route by label or correct index.
         return ProfileScreen(key: profileKey);
       default:
         return _isLoading ? _buildShimmerFeed() : _buildFeed();
     }
+  }
+
+  Widget _buildMessagesScreen() {
+    return MessageScreen();
+  }
+
+  String _searchQuery = "";
+  List<dynamic> _userSearchResults = [];
+  List<dynamic> _postSearchResults = [];
+  bool _isSearching = false;
+  int _searchTab = 0; // 0 for Users, 1 for Posts
+
+  Widget _buildSearchScreen() {
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    final currentUserId = auth.user?.id ?? "";
+
+    return SafeArea(
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(15),
+                border: Border.all(color: Colors.white10),
+              ),
+              child: TextField(
+                style: GoogleFonts.spaceMono(color: Colors.white),
+                onChanged: (val) async {
+                  setState(() {
+                    _searchQuery = val;
+                    _isSearching = true;
+                  });
+                  if (val.trim().isNotEmpty) {
+                    final users = await ApiService.searchUsers(val, currentUserId);
+                    final posts = await ApiService.searchPosts(val, currentUserId);
+                    if (mounted) {
+                      setState(() {
+                        _userSearchResults = users;
+                        _postSearchResults = posts;
+                        _isSearching = false;
+                      });
+                    }
+                  } else {
+                    if (mounted) {
+                      setState(() {
+                        _userSearchResults = [];
+                        _postSearchResults = [];
+                        _isSearching = false;
+                      });
+                    }
+                  }
+                },
+                decoration: InputDecoration(
+                  hintText: "SEARCH_DATABASE...",
+                  hintStyle: GoogleFonts.spaceMono(color: Colors.white24),
+                  border: InputBorder.none,
+                  prefixIcon: const Icon(Icons.search_rounded, color: AppTheme.peach),
+                ),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Row(
+              children: [
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () => setState(() => _searchTab = 0),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      decoration: BoxDecoration(
+                        border: Border(bottom: BorderSide(color: _searchTab == 0 ? AppTheme.peach : Colors.transparent, width: 2)),
+                      ),
+                      child: Center(child: Text("USERS", style: GoogleFonts.spaceMono(color: _searchTab == 0 ? AppTheme.peach : Colors.white54, fontWeight: FontWeight.bold))),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () => setState(() => _searchTab = 1),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      decoration: BoxDecoration(
+                        border: Border(bottom: BorderSide(color: _searchTab == 1 ? AppTheme.peach : Colors.transparent, width: 2)),
+                      ),
+                      child: Center(child: Text("POSTS", style: GoogleFonts.spaceMono(color: _searchTab == 1 ? AppTheme.peach : Colors.white54, fontWeight: FontWeight.bold))),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: _searchQuery.isEmpty 
+              ? Center(child: Text('ENTER_QUERY_TO_INITIATE_SEARCH', style: GoogleFonts.spaceMono(color: Colors.white24)))
+              : _isSearching
+                ? const Center(child: CircularProgressIndicator(color: AppTheme.peach))
+                : _searchTab == 0 
+                  ? _buildUserSearchResults()
+                  : _buildPostSearchResults(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUserSearchResults() {
+    if (_userSearchResults.isEmpty) {
+      return Center(child: Text('NO_USERS_FOUND', style: GoogleFonts.spaceMono(color: AppTheme.coral)));
+    }
+    return ListView.builder(
+      itemCount: _userSearchResults.length,
+      itemBuilder: (context, idx) {
+        final user = _userSearchResults[idx];
+        return ListTile(
+          leading: CircleAvatar(
+            backgroundColor: AppTheme.peach,
+            child: Text(user['name'][0].toUpperCase(), style: const TextStyle(color: AppTheme.darkPurple)),
+          ),
+          title: Text("@${user['name']}", style: GoogleFonts.spaceMono(color: Colors.white, fontWeight: FontWeight.bold)),
+          subtitle: Text("ID: ${user['id'].toString().substring(0, 8)}...", style: GoogleFonts.spaceMono(color: Colors.white54, fontSize: 10)),
+          onTap: () {
+            // Options to view profile or message
+            showModalBottomSheet(
+              context: context,
+              backgroundColor: AppTheme.mediumPurple,
+              shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+              builder: (context) => SafeArea(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ListTile(
+                      leading: const Icon(Icons.person_rounded, color: AppTheme.peach),
+                      title: Text("VIEW_PROFILE", style: GoogleFonts.spaceMono(color: Colors.white)),
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.push(context, MaterialPageRoute(builder: (context) => ProfileScreen(targetUserId: user['id'])));
+                      },
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.chat_bubble_rounded, color: AppTheme.peach),
+                      title: Text("INITIATE_TRANSMISSION", style: GoogleFonts.spaceMono(color: Colors.white)),
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.push(context, MaterialPageRoute(builder: (context) => ChatScreen(otherUserId: user['id'], otherUsername: user['name'])));
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildPostSearchResults() {
+    if (_postSearchResults.isEmpty) {
+      return Center(child: Text('NO_POSTS_FOUND', style: GoogleFonts.spaceMono(color: AppTheme.coral)));
+    }
+    
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    
+    return ListView.builder(
+      padding: const EdgeInsets.only(bottom: 120), // Extra bottom padding for nav bar
+      itemCount: _postSearchResults.length,
+      itemBuilder: (context, index) {
+        return _buildPostCard(_postSearchResults[index], auth, index);
+      },
+    );
   }
 
   Widget _buildShimmerFeed() {
@@ -875,7 +1232,12 @@ class _HomeScreenState extends State<HomeScreen> {
       padding: const EdgeInsets.only(top: 120, bottom: 120), // Extra bottom padding for nav bar
       itemCount: _posts.length,
       itemBuilder: (context, index) {
-        final post = _posts[index];
+        return _buildPostCard(_posts[index], auth, index);
+      },
+    );
+  }
+
+  Widget _buildPostCard(dynamic post, AuthProvider auth, int index) {
         final postId = post['id'];
         final mediaUrl = post['mediaUrl'];
         final author = post['author'] ?? "UNKNOWN_SOURCE";
@@ -919,7 +1281,12 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text("@$author", style: GoogleFonts.spaceMono(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 14)),
+                            InkWell(
+                              onTap: () {
+                                Navigator.push(context, MaterialPageRoute(builder: (context) => ProfileScreen(targetUserId: authorId)));
+                              },
+                              child: Text("@$author", style: GoogleFonts.spaceMono(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 14)),
+                            ),
                             if (location != null)
                               Text("📍 $location", style: GoogleFonts.spaceMono(color: AppTheme.peach.withOpacity(0.8), fontSize: 9)),
                           ],
@@ -945,10 +1312,20 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                           ],
                         )
-                      else
-                        IconButton(
+                      else if (auth.user != null)
+                        PopupMenuButton<String>(
                           icon: const Icon(Icons.more_horiz_rounded, color: Colors.white30),
-                          onPressed: () => _showFeedback("REPORTING_PROTOCOL_INITIATED..."),
+                          color: AppTheme.mediumPurple,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10), side: BorderSide(color: Colors.white10)),
+                          onSelected: (value) {
+                            if (value == 'report') _showReportDialog(postId, 'Post');
+                          },
+                          itemBuilder: (context) => [
+                            PopupMenuItem(
+                              value: 'report',
+                              child: Text("REPORT_TRANSMISSION", style: GoogleFonts.spaceMono(color: AppTheme.coral)),
+                            ),
+                          ],
                         ),
                     ],
                   ),
@@ -1003,12 +1380,152 @@ class _HomeScreenState extends State<HomeScreen> {
                         isSaved ? AppTheme.peach : Colors.white30, 
                         () => _handleSave(postId)
                       ),
+                      _buildActionButton(
+                        Icons.verified_user_rounded,
+                        'VERIFY',
+                        AppTheme.peach,
+                        () => _handleVerify(post)
+                      ),
                     ],
                   ),
                 ],
               ),
         ).animate().fade(duration: 400.ms, delay: (index * 100).ms).slideY(begin: 0.1); // Staggered Animation
-      },
+  }
+
+  Future<void> _handleVerify(dynamic post) async {
+    final postId = post['id'];
+    final content = post['content'] ?? "";
+    final mediaUrl = post['mediaUrl'];
+    final isVideo = post['isVideo'] ?? false;
+
+    // 1. Check if we already have the data in the post object (from feed)
+    if (post['truthScore'] != null) {
+      _showVerificationResult({
+        'verdict': post['truthVerdict'],
+        'truth_score': post['truthScore'],
+        'explanation': post['truthExplanation'],
+        'sources': post['truthSources']
+      });
+      return;
+    }
+
+    if (content.trim().isEmpty && mediaUrl == null) {
+      _showFeedback("NO_CONTENT_TO_VERIFY");
+      return;
+    }
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator(color: AppTheme.peach))
+    );
+
+    // If text is empty, send a placeholder or descriptive text to avoid backend rejection
+    final textToSend = content.trim().isEmpty ? "[IMAGE_ONLY_POST]" : content;
+
+    final result = await ApiService.verifyClaim(
+        textToSend, 
+        imageUrl: mediaUrl, 
+        isVideo: isVideo,
+        postId: postId
+    );
+    
+    if (!mounted) return;
+    Navigator.pop(context); // Close loading
+
+    if (result['success'] == true) {
+      _showVerificationResult(result);
+    } else {
+      _showFeedback(result['message'] ?? "VERIFICATION_FAILED");
+    }
+  }
+
+  void _showVerificationResult(Map<String, dynamic> data) {
+    final verdict = data['verdict'] ?? 'Unverified';
+    final isClaim = data['is_claim'] ?? true;
+    final score = (data['truth_score'] ?? 0.5) * 100;
+    final explanation = data['explanation'] ?? 'No explanation provided.';
+    final sources = data['sources'] as List? ?? [];
+
+    Color verdictColor;
+    IconData verdictIcon;
+    
+    switch (verdict.toString().toLowerCase()) {
+      case 'verified':
+        verdictColor = Colors.green;
+        verdictIcon = Icons.check_circle_rounded;
+        break;
+      case 'false':
+        verdictColor = Colors.redAccent;
+        verdictIcon = Icons.cancel_rounded;
+        break;
+      case 'partially true':
+        verdictColor = Colors.orange;
+        verdictIcon = Icons.warning_rounded;
+        break;
+      case 'not a claim':
+        verdictColor = Colors.white54;
+        verdictIcon = Icons.info_outline_rounded;
+        break;
+      default:
+        verdictColor = Colors.blue;
+        verdictIcon = Icons.help_rounded;
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.darkPurple,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: verdictColor.withOpacity(0.5), width: 2),
+        ),
+        title: Row(
+          children: [
+            Icon(verdictIcon, color: verdictColor),
+            const SizedBox(width: 10),
+            Text(verdict.toUpperCase(), style: GoogleFonts.righteous(color: verdictColor)),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (isClaim && verdict != 'Not a Claim')
+                Text(
+                  "Truth Score: ${score.toStringAsFixed(0)}%",
+                  style: GoogleFonts.spaceMono(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+              if (verdict == 'Not a Claim')
+                Text(
+                  "Non-Factual Content",
+                  style: GoogleFonts.spaceMono(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                ),
+              const SizedBox(height: 15),
+              Text(
+                explanation,
+                style: GoogleFonts.spaceMono(color: Colors.white70, fontSize: 12),
+              ),
+              if (sources.isNotEmpty && verdict != 'Not a Claim') ...[
+                const SizedBox(height: 15),
+                Text("Reliability signals:", style: GoogleFonts.spaceMono(color: AppTheme.peach, fontSize: 10, fontWeight: FontWeight.bold)),
+                ...sources.map((s) => Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text("• $s", style: GoogleFonts.spaceMono(color: Colors.white38, fontSize: 10)),
+                )).toList(),
+              ]
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text("CLOSE", style: GoogleFonts.spaceMono(color: AppTheme.peach, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1051,41 +1568,44 @@ class _PostCarouselState extends State<_PostCarousel> {
 
   @override
   Widget build(BuildContext context) {
+    Widget carouselContent = ScrollConfiguration(
+      behavior: _CarouselScrollBehavior(),
+      child: PageView.builder(
+        controller: _controller,
+        itemCount: widget.urls.length,
+        onPageChanged: (idx) => setState(() => _currentPage = idx),
+        itemBuilder: (context, idx) {
+          return Container(
+            margin: const EdgeInsets.symmetric(horizontal: 2),
+            decoration: BoxDecoration(
+              color: AppTheme.darkPurple.withOpacity(0.5),
+              borderRadius: BorderRadius.circular(15),
+              border: Border.all(color: Colors.white.withOpacity(0.05)),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(14),
+              child: widget.isVideo 
+                ? VideoPlayerWidget(videoUrl: "${ApiService.baseUrl.replaceFirst('/api', '')}${widget.urls[idx]}")
+                : Image.network(
+                    "${ApiService.baseUrl.replaceFirst('/api', '')}${widget.urls[idx]}",
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) => const Center(child: Icon(Icons.broken_image, color: Colors.white10)),
+                  ),
+            ),
+          );
+        },
+      ),
+    );
+
     return Column(
       children: [
         Container(
-          height: 300,
           width: double.infinity,
           margin: const EdgeInsets.only(bottom: 5),
-          child: ScrollConfiguration(
-            behavior: _CarouselScrollBehavior(),
-            child: PageView.builder(
-              controller: _controller,
-              itemCount: widget.urls.length,
-              onPageChanged: (idx) => setState(() => _currentPage = idx),
-              itemBuilder: (context, idx) {
-                return Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 2),
-                  decoration: BoxDecoration(
-                    color: AppTheme.darkPurple.withOpacity(0.5),
-                    borderRadius: BorderRadius.circular(15),
-                    border: Border.all(color: Colors.white.withOpacity(0.05)),
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(14),
-                    child: widget.isVideo 
-                      ? VideoPlayerWidget(videoUrl: "${ApiService.baseUrl.replaceFirst('/api', '')}${widget.urls[idx]}")
-                      : Image.network(
-                          "${ApiService.baseUrl.replaceFirst('/api', '')}${widget.urls[idx]}",
-                          width: double.infinity,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) => const Center(child: Icon(Icons.broken_image, color: Colors.white10)),
-                        ),
-                  ),
-                );
-              },
-            ),
-          ),
+          child: widget.isVideo 
+            ? AspectRatio(aspectRatio: 16 / 9, child: carouselContent)
+            : SizedBox(height: 300, child: carouselContent),
         ),
         if (widget.urls.length > 1)
           Row(

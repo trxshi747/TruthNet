@@ -4,12 +4,14 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:model2/screens/login_screen.dart';
 import 'package:model2/screens/signup_screen.dart';
 import 'package:model2/screens/home_screen.dart';
+import 'package:model2/screens/main_layout.dart';
 import 'package:model2/screens/profile_screen.dart';
 import 'package:model2/screens/post_screen.dart';
 import 'package:model2/screens/message_screen.dart';
 import 'package:model2/screens/moderator_screen.dart';
 import 'package:model2/screens/admin_screen.dart';
 import 'package:model2/providers/auth_provider.dart';
+import 'package:model2/providers/notification_provider.dart';
 
 import 'package:model2/core/theme/app_theme.dart';
 
@@ -20,8 +22,11 @@ void main() {
 class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (context) => AuthProvider(),
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (context) => AuthProvider()),
+        ChangeNotifierProvider(create: (context) => NotificationProvider()),
+      ],
       child: MaterialApp(
         title: 'TruthNet',
         debugShowCheckedModeBanner: false,
@@ -30,7 +35,7 @@ class MyApp extends StatelessWidget {
         routes: {
           '/': (context) => LoginScreen(),
           '/signup': (context) => SignUpScreen(),
-          '/home': (context) => HomeScreen(),
+          '/home': (context) => const MainLayout(),
           '/profile': (context) => ProfileScreen(),
           '/post': (context) => PostScreen(),
           '/message': (context) => MessageScreen(),

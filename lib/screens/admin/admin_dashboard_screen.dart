@@ -238,9 +238,9 @@ class _KpiGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final items = [
-      _KpiItem('Users',    '${metrics["users"]    ?? 0}', Icons.person_outline_rounded,    Color(0xFF4D9FEC)),
-      _KpiItem('Posts',    '${metrics["posts"]    ?? 0}', Icons.article_outlined,           Color(0xFF26E5FF)),
-      _KpiItem('Comments', '${metrics["comments"] ?? 0}', Icons.chat_bubble_outline_rounded,Color(0xFFFFCF26)),
+      _KpiItem('Users',    '${metrics["users"]    ?? 0}', Icons.person_outline_rounded,    const Color(0xFF4D9FEC)),
+      _KpiItem('Posts',    '${metrics["posts"]    ?? 0}', Icons.article_outlined,           const Color(0xFF26E5FF)),
+      _KpiItem('Comments', '${metrics["comments"] ?? 0}', Icons.chat_bubble_outline_rounded,const Color(0xFFFFCF26)),
     ];
 
     return Container(

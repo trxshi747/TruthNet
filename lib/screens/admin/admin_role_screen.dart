@@ -14,7 +14,6 @@ class AdminRoleScreen extends StatefulWidget {
 class _AdminRoleScreenState extends State<AdminRoleScreen> {
   List<dynamic> _roles = [];
   bool _isLoading = true;
-  bool _useMock = false;
 
   @override
   void initState() {
@@ -23,183 +22,26 @@ class _AdminRoleScreenState extends State<AdminRoleScreen> {
   }
 
   Future<void> fetchRoles() async {
+    if (!mounted) return;
     setState(() => _isLoading = true);
 
     try {
       final data = await ApiService.getRoles();
-
-      if (data.isEmpty) {
-        _useMock = true;
-        _roles = _mockRoles();
-      } else {
-        _useMock = false;
-        _roles = data;
+      if (mounted) {
+        setState(() {
+          _roles = data;
+          _isLoading = false;
+        });
       }
     } catch (e) {
-      _useMock = true;
-      _roles = _mockRoles();
+      if (mounted) {
+        setState(() {
+          _roles = [];
+          _isLoading = false;
+        });
+      }
     }
-
-    setState(() => _isLoading = false);
   }
-
-  List<Map<String, dynamic>> _mockRoles() {
-    return [
-      {
-        "id": "1",
-        "name": "admin",
-        "description": "Full access",
-      },
-      {
-        "id": "2",
-        "name": "moderator",
-        "description": "Moderation access",
-      },
-    ];
-  }
-
-  Widget _buildRoleCard(dynamic role) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 15),
-      padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(
-        color: AppTheme.mediumPurple.withOpacity(0.3),
-        borderRadius: BorderRadius.circular(15),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            role['name'] ?? "",
-            style: GoogleFonts.righteous(
-              color: AppTheme.peach,
-              fontSize: 16,
-            ),
-          ),
-
-          const SizedBox(height: 5),
-
-          Text(
-            role['description'] ?? "",
-            style: GoogleFonts.spaceMono(
-              color: Colors.white70,
-            ),
-          ),
-
-          const SizedBox(height: 10),
-
-          Row(
-            children: [
-              _actionButton("EDIT", Colors.blue, () {
-                _openRoleForm(role: role);
-              }),
-              const SizedBox(width: 10),
-              _actionButton("DELETE", Colors.red, () {
-                _deleteRole(role);
-              }),
-            ],
-          )
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInput(String label, TextEditingController controller, {bool obscure = false}) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 15),
-      child: TextField(
-        controller: controller,
-        obscureText: obscure,
-        style: GoogleFonts.spaceMono(color: Colors.white),
-        decoration: InputDecoration(
-          labelText: label,
-          labelStyle: GoogleFonts.spaceMono(color: Colors.white54),
-        ),
-      ),
-    );
-  }
-
-  /*
-  void _openRoleForm({Map<String, dynamic>? role}) {
-    final nameController =
-    TextEditingController(text: role?['name']);
-    final descController =
-    TextEditingController(text: role?['description']);
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: AppTheme.darkPurple,
-      builder: (_) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom,
-          left: 25,
-          right: 25,
-          top: 25,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              role == null ? "ADD_ROLE" : "EDIT_ROLE",
-              style: GoogleFonts.righteous(
-                color: AppTheme.peach,
-                fontSize: 20,
-              ),
-            ),
-
-            const SizedBox(height: 20),
-
-            _buildInput("ROLE NAME", nameController),
-            _buildInput("DESCRIPTION", descController),
-
-            const SizedBox(height: 25),
-
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.peach,
-                minimumSize: const Size(double.infinity, 50),
-              ),
-              onPressed: () async {
-                final data = {
-                  "name": nameController.text,
-                  "description": descController.text,
-                };
-
-                if (_useMock) {
-                  setState(() {
-                    if (role == null) {
-                      _roles.add({"id": DateTime.now().toString(), ...data});
-                    } else {
-                      role.addAll(data);
-                    }
-                  });
-                } else {
-                  if (role == null) {
-                    await ApiService.addRole(data);
-                  } else {
-                    await ApiService.updateRole(role['id'], data);
-                  }
-
-                  fetchRoles();
-                }
-
-                Navigator.pop(context);
-              },
-              child: Text(
-                "SAVE",
-                style: GoogleFonts.spaceMono(
-                  color: AppTheme.darkPurple,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-  */
 
   void _openRoleForm({Map<String, dynamic>? role}) {
     final nameController = TextEditingController(text: role?['name'] ?? '');
@@ -215,39 +57,20 @@ class _AdminRoleScreenState extends State<AdminRoleScreen> {
       builder: (_) => Padding(
         padding: EdgeInsets.only(
           bottom: MediaQuery.of(context).viewInsets.bottom,
-          left: 25, right: 25, top: 25,
+          left: 25,
+          right: 25,
+          top: 25,
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              role == null ? "ADD ROLE" : "EDIT ROLE",
+              role == null ? "ADD_ROLE" : "EDIT_ROLE",
               style: GoogleFonts.righteous(color: AppTheme.peach, fontSize: 20),
             ),
             const SizedBox(height: 20),
-            TextField(
-              controller: nameController,
-              style: GoogleFonts.spaceMono(color: Colors.white),
-              decoration: InputDecoration(
-                labelText: "NAME",
-                labelStyle: GoogleFonts.spaceMono(color: Colors.white54),
-                enabledBorder: const UnderlineInputBorder(
-                  borderSide: BorderSide(color: Colors.white24),
-                ),
-              ),
-            ),
-            const SizedBox(height: 15),
-            TextField(
-              controller: descController,
-              style: GoogleFonts.spaceMono(color: Colors.white),
-              decoration: InputDecoration(
-                labelText: "DESCRIPTION",
-                labelStyle: GoogleFonts.spaceMono(color: Colors.white54),
-                enabledBorder: const UnderlineInputBorder(
-                  borderSide: BorderSide(color: Colors.white24),
-                ),
-              ),
-            ),
+            _buildInput("NAME", nameController),
+            _buildInput("DESCRIPTION", descController),
             const SizedBox(height: 25),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
@@ -257,40 +80,30 @@ class _AdminRoleScreenState extends State<AdminRoleScreen> {
               onPressed: () async {
                 if (nameController.text.isEmpty) return;
 
+                final data = {
+                  "name": nameController.text,
+                  "description": descController.text,
+                };
+
                 bool success;
                 if (role == null) {
-                  // Création
-                  success = await ApiService.addRole({
-                    'name': nameController.text,
-                    'description': descController.text,
-                  });
+                  success = await ApiService.addRole(data);
                 } else {
-                  // ← Mise à jour — passe bien role['id']
-                  success = await ApiService.updateRole(
-                    role['id'],
-                    {
-                      'name': nameController.text,
-                      'description': descController.text,
-                    },
-                  );
+                  success = await ApiService.updateRole(role['id'], data);
                 }
 
-                Navigator.pop(context);
-                if (success) {
-                  fetchRoles(); // recharger la liste
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text("ACTION_FAILED")),
-                  );
+                if (mounted) {
+                  Navigator.pop(context);
+                  if (success) {
+                    fetchRoles();
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text("OPERATION_FAILED")),
+                    );
+                  }
                 }
               },
-              child: Text(
-                "SAVE",
-                style: GoogleFonts.spaceMono(
-                  color: AppTheme.darkPurple,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
+              child: Text("SAVE", style: GoogleFonts.spaceMono(color: AppTheme.darkPurple, fontWeight: FontWeight.bold)),
             ),
             const SizedBox(height: 30),
           ],
@@ -299,72 +112,31 @@ class _AdminRoleScreenState extends State<AdminRoleScreen> {
     );
   }
 
-  Widget _actionButton(String label, Color color, VoidCallback onTap) {
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: color),
-        ),
-        child: Text(
-          label,
-          style: GoogleFonts.spaceMono(color: color, fontSize: 10),
+  Widget _buildInput(String label, TextEditingController controller) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 15),
+      child: TextField(
+        controller: controller,
+        style: GoogleFonts.spaceMono(color: Colors.white),
+        decoration: InputDecoration(
+          labelText: label,
+          labelStyle: GoogleFonts.spaceMono(color: Colors.white54),
+          enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
         ),
       ),
     );
   }
-
-  /*
-  void _deleteRole(String id) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text("Confirm"),
-        content: const Text("Delete this role?"),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("Cancel")),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text("Delete")),
-        ],
-      ),
-    );
-
-    if (confirm != true) return;
-
-    if (_useMock) {
-      setState(() {
-        _roles.removeWhere((r) => r['id'] == id);
-      });
-    } else {
-      await ApiService.deleteRole(id);
-      fetchRoles();
-    }
-  }
-  */
 
   void _deleteRole(Map<String, dynamic> role) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
         backgroundColor: AppTheme.darkPurple,
-        title: Text(
-          "DELETE ROLE",
-          style: GoogleFonts.righteous(color: Colors.redAccent),
-        ),
-        content: Text(
-          "Delete \"${role['name']}\"?",
-          style: GoogleFonts.spaceMono(color: Colors.white70),
-        ),
+        title: Text("DELETE_ROLE", style: GoogleFonts.righteous(color: Colors.redAccent)),
+        content: Text("Delete \"${role['name']}\"?", style: GoogleFonts.spaceMono(color: Colors.white70)),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text("CANCEL", style: GoogleFonts.spaceMono(color: Colors.white)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: Text("DELETE", style: GoogleFonts.spaceMono(color: Colors.redAccent)),
-          ),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text("CANCEL", style: GoogleFonts.spaceMono(color: Colors.white))),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: Text("DELETE", style: GoogleFonts.spaceMono(color: Colors.redAccent))),
         ],
       ),
     );
@@ -372,128 +144,77 @@ class _AdminRoleScreenState extends State<AdminRoleScreen> {
     if (confirmed != true) return;
 
     final result = await ApiService.deleteRole(role['id']);
-
-    /*
     if (result['success'] == true) {
       fetchRoles();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("ROLE_DELETED")),
-      );
     } else {
-      // Affiche le message spécifique du backend
-      final message = result['details'] ?? result['message'] ?? 'ACTION_FAILED';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-          backgroundColor: Colors.orange,
-          duration: const Duration(seconds: 4),
-        ),
-      );
+      final msg = result['message'] ?? 'DELETE_FAILED';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.orange));
     }
-    */
+  }
 
-    if (result['success'] == true) {
-      fetchRoles();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("ROLE_DELETED")),
-      );
-    } else {
-      // Popup au lieu du SnackBar
-      showDialog(
-        context: context,
-        builder: (_) => AlertDialog(
-          backgroundColor: AppTheme.darkPurple,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Row(
+  Widget _buildRoleCard(dynamic role) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 15),
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(color: AppTheme.mediumPurple.withOpacity(0.3), borderRadius: BorderRadius.circular(15)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(role['name'] ?? "N/A", style: GoogleFonts.righteous(color: AppTheme.peach, fontSize: 16)),
+          const SizedBox(height: 5),
+          Text(role['description'] ?? "", style: GoogleFonts.spaceMono(color: Colors.white70, fontSize: 12)),
+          const SizedBox(height: 15),
+          Row(
             children: [
-              const Icon(Icons.warning_amber_rounded, color: Colors.orange),
+              _actionButton("EDIT", Colors.blue, () => _openRoleForm(role: role)),
               const SizedBox(width: 10),
-              Text(
-                "CANNOT DELETE",
-                style: GoogleFonts.righteous(color: Colors.orange),
-              ),
+              _actionButton("DELETE", Colors.red, () => _deleteRole(role)),
             ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                "This role cannot be deleted.",
-                style: GoogleFonts.spaceMono(color: Colors.white, fontSize: 13),
-              ),
-              const SizedBox(height: 10),
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.orange.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.orange.withOpacity(0.4)),
-                ),
-                child: Text(
-                  result['details'] ?? result['message'] ?? 'Role is assigned to users.',
-                  style: GoogleFonts.spaceMono(color: Colors.orange, fontSize: 11),
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text(
-                "OK",
-                style: GoogleFonts.spaceMono(color: AppTheme.peach),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
+          )
+        ],
+      ),
+    );
+  }
+
+  Widget _actionButton(String label, Color color, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(borderRadius: BorderRadius.circular(8), border: Border.all(color: color)),
+        child: Text(label, style: GoogleFonts.spaceMono(color: color, fontSize: 10)),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      /*return const Scaffold(
-        body: DynamicBackground(
-          child: Center(
-            child: CircularProgressIndicator(color: Color(0xFFF0C38E)),
-          ),
-        ),
-      ); */
-      return Scaffold(
-        appBar: AppBar(title: const Text("User Management")),
-
-        floatingActionButton: FloatingActionButton(
-          backgroundColor: AppTheme.peach,
-          onPressed: () => _openRoleForm(), // 🔥 ouvre le formulaire
-          child: const Icon(Icons.add, color: Color(0xFF312C51)),
-        ),
-
-        body: DynamicBackground(
-          child: ListView.builder(
-            padding: const EdgeInsets.all(20),
-            itemCount: _roles.length,
-            itemBuilder: (context, index) {
-              return _buildRoleCard(_roles[index]);
-            },
-          ),
-        ),
-      );
+      return const Scaffold(body: DynamicBackground(child: Center(child: CircularProgressIndicator(color: AppTheme.peach))));
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text("User Management")),
+      backgroundColor: Colors.transparent,
+      appBar: AppBar(
+        title: Text("Roles", style: GoogleFonts.righteous(color: AppTheme.peach)),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        actions: [IconButton(icon: const Icon(Icons.refresh), onPressed: fetchRoles)],
+      ),
+      floatingActionButton: FloatingActionButton(
+        backgroundColor: AppTheme.peach,
+        onPressed: () => _openRoleForm(),
+        child: const Icon(Icons.add, color: AppTheme.darkPurple),
+      ),
       body: DynamicBackground(
-        child: ListView.builder(
-          padding: const EdgeInsets.all(20),
-          itemCount: _roles.length,
-          itemBuilder: (context, index) {
-            return _buildRoleCard(_roles[index]);
-          },
-        ),
+        child: _roles.isEmpty
+            ? const Center(child: Text("NO_ROLES_FOUND", style: TextStyle(color: Colors.white54)))
+            : ListView.builder(
+                padding: const EdgeInsets.all(20),
+                itemCount: _roles.length,
+                itemBuilder: (_, i) => _buildRoleCard(_roles[i]),
+              ),
       ),
     );
   }
-
 }

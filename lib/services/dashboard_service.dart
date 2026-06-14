@@ -155,7 +155,7 @@ class DashboardService {
     return 'http://10.0.2.2:3000/api';
   }
 
-  // ── Platform counts (users, posts, comments) ──────────────────────────────
+  // ── Platform counts (users, posts, comments, reports) ──────────────────────────────
   static Future<Map<String, dynamic>> getMetrics() async {
     try {
       final res = await http.get(Uri.parse('$baseUrl/admin/dashboard'));
@@ -165,9 +165,15 @@ class DashboardService {
         'users':    data['users']    ?? 0,
         'posts':    data['posts']    ?? 0,
         'comments': data['comments'] ?? 0,
+        'reports':  data['reports']  ?? 0,
+        'pendingReports': data['pendingReports'] ?? 0,
+        'resolvedReports': data['resolvedReports'] ?? 0,
       };
     } catch (_) {
-      return {'users': 0, 'posts': 0, 'comments': 0};
+      return {
+        'users': 0, 'posts': 0, 'comments': 0,
+        'reports': 0, 'pendingReports': 0, 'resolvedReports': 0
+      };
     }
   }
 

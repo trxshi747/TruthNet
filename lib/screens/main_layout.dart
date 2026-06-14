@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:model2/providers/auth_provider.dart';
+import 'package:model2/providers/notification_provider.dart';
 import 'package:model2/widgets/dynamic_background.dart';
 import 'package:model2/widgets/custom_floating_nav_bar.dart';
 import 'package:model2/screens/home_screen.dart';
 import 'package:model2/screens/message_screen.dart';
 import 'package:model2/screens/profile_screen.dart';
+import 'package:model2/screens/moderator_screen.dart';
+import 'package:model2/screens/admin_screen.dart';
+import 'package:model2/screens/search_screen.dart';
 
 class MainLayout extends StatefulWidget {
   const MainLayout({super.key});
@@ -17,13 +21,26 @@ class MainLayout extends StatefulWidget {
 class _MainLayoutState extends State<MainLayout> {
   int _currentIndex = 0;
 
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final auth = Provider.of<AuthProvider>(context, listen: false);
+      if (auth.user != null) {
+        final notifProvider = Provider.of<NotificationProvider>(context, listen: false);
+        notifProvider.initSocket(auth.user!.id);
+        notifProvider.fetchNotifications(auth.user!.id);
+      }
+    });
+  }
+
   List<Map<String, dynamic>> _getNavItems(UserRole role) {
     List<Map<String, dynamic>> items = [
       {'icon': Icons.home_rounded, 'label': 'Home'},
       {'icon': Icons.search_rounded, 'label': 'Search'},
     ];
     if (role != UserRole.guest) {
-      items.add({'icon': Icons.chat_bubble_rounded, 'label': 'Comms'});
+      items.add({'icon': Icons.chat_bubble_rounded, 'label': 'Messages'});
       items.add({'icon': Icons.person_rounded, 'label': 'Profile'});
     }
     if (role == UserRole.moderator || role == UserRole.admin) {
@@ -43,8 +60,8 @@ class _MainLayoutState extends State<MainLayout> {
     final theme = Theme.of(context);
 
     final List<Widget> screens = [
-      HomeScreen(),
-      Center(child: Text('Searching...', style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.secondary))),
+      FeedScreen(),
+      const SearchScreen(),
     ];
     
     if (role != UserRole.guest) {
@@ -52,10 +69,10 @@ class _MainLayoutState extends State<MainLayout> {
       screens.add(ProfileScreen(key: profileKey));
     }
     if (role == UserRole.moderator || role == UserRole.admin) {
-      screens.add(const Center(child: Text('Moderator')));
+      screens.add(ModeratorScreen());
     }
     if (role == UserRole.admin) {
-      screens.add(const Center(child: Text('Admin')));
+      screens.add(AdminScreen());
     }
 
     return Scaffold(
@@ -63,7 +80,7 @@ class _MainLayoutState extends State<MainLayout> {
       body: Stack(
         children: [
           // Layer 1: Dynamic Background
-          const DynamicBackground(child: null,),
+          const DynamicBackground(child: SizedBox.shrink()),
           
           // Layer 2: Screens
           Positioned.fill(

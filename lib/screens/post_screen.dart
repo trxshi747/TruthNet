@@ -230,9 +230,132 @@ class _PostScreenState extends State<PostScreen> {
             behavior: SnackBarBehavior.floating,
           ),
         );
+      } else if (result['message'] == 'CONTENT_TOO_TOXIC') {
+          _showToxicityAlert(result['detail'] ?? "Your content is too toxic to be published.");
+      } else if (result['message'] == 'CONTENT_UNVERIFIED' || result['message'] == 'CONTENT_NONSENSE') {
+          _showRejectionAlert(result);
+      } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result['message'] ?? 'UPLOAD_FAILED', style: GoogleFonts.spaceMono(color: Colors.white)),
+              backgroundColor: AppTheme.coral,
+            ),
+          );
       }
     }
     setState(() => _isLoading = false);
+  }
+
+  void _showRejectionAlert(Map<String, dynamic> data) {
+    final verdict = data['verdict'] ?? 'Unverified';
+    final score = ((data['truth_score'] ?? 0.0) * 100).toDouble();
+    final explanation = data['detail'] ?? 'No explanation provided.';
+
+    Color verdictColor = Colors.orange;
+    IconData verdictIcon = Icons.fact_check_rounded;
+    
+    if (data['message'] == 'CONTENT_NONSENSE') {
+      verdictColor = Colors.white54;
+      verdictIcon = Icons.help_outline_rounded;
+    } else if (verdict.toString().toLowerCase() == 'false') {
+      verdictColor = Colors.redAccent;
+      verdictIcon = Icons.cancel_rounded;
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.darkPurple,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: verdictColor.withOpacity(0.5), width: 2),
+        ),
+        title: Row(
+          children: [
+            Icon(verdictIcon, color: verdictColor),
+            const SizedBox(width: 10),
+            Text(verdict.toString().toUpperCase(), style: GoogleFonts.righteous(color: verdictColor)),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (data['message'] != 'CONTENT_NONSENSE')
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12.0),
+                  child: Text(
+                    "Truth Score: ${score.toStringAsFixed(0)}%",
+                    style: GoogleFonts.spaceMono(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                ),
+              Text(
+                explanation,
+                style: GoogleFonts.spaceMono(color: Colors.white70, fontSize: 13),
+              ),
+              const SizedBox(height: 20),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: verdictColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: verdictColor.withOpacity(0.3)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.block_flipped, size: 16, color: verdictColor),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        "THIS_POST_WILL_NOT_BE_PUBLISHED",
+                        style: GoogleFonts.spaceMono(color: verdictColor, fontSize: 10, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text("CLOSE", style: GoogleFonts.spaceMono(color: AppTheme.peach, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showToxicityAlert(String detail) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.darkPurple,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: const BorderSide(color: AppTheme.coral, width: 2),
+        ),
+        title: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded, color: AppTheme.coral),
+            const SizedBox(width: 10),
+            Text("CONTENT_BLOCKED", style: GoogleFonts.righteous(color: AppTheme.coral)),
+          ],
+        ),
+        content: Text(
+          detail,
+          style: GoogleFonts.spaceMono(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text("UNDERSTOOD", style: GoogleFonts.spaceMono(color: AppTheme.peach, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
   }
 
   @override

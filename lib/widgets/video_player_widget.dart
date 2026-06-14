@@ -51,8 +51,8 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
         videoPlayerController: _videoPlayerController,
         autoPlay: widget.autoPlay,
         looping: widget.looping,
-        // Taller aspect ratio (0.75 of original) creates black bars for controls
-        aspectRatio: videoRatio * 0.75, 
+        // Use the actual aspect ratio to prevent black bars
+        aspectRatio: videoRatio, 
         
         // Maximizing Controls
         allowFullScreen: true,
@@ -140,22 +140,13 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
     }
 
     if (_chewieController != null && _chewieController!.videoPlayerController.value.isInitialized) {
-      return AspectRatio(
-        aspectRatio: _videoPlayerController.value.aspectRatio,
-        child: Container(
-          color: Colors.black,
-          // Restoring stable 100px elevation as preferred
-          padding: const EdgeInsets.only(bottom: 100), 
-          child: Theme(
-            data: ThemeData.dark().copyWith(
-              // Safe 24px icon size for stability
-              iconTheme: const IconThemeData(size: 24, color: Colors.white),
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(15),
-              child: Chewie(controller: _chewieController!),
-            ),
+      return Container(
+        color: Colors.black,
+        child: Theme(
+          data: ThemeData.dark().copyWith(
+            iconTheme: const IconThemeData(size: 24, color: Colors.white),
           ),
+          child: Chewie(controller: _chewieController!),
         ),
       );
     }
