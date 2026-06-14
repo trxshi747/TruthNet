@@ -17,6 +17,7 @@ from models.toxicity import (
     analyze_batch as toxicity_batch,
     aggregate_toxicity,
 )
+from models.fact_check import verify_claim
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/analyze", tags=["Analysis"])
@@ -26,6 +27,8 @@ router = APIRouter(prefix="/analyze", tags=["Analysis"])
 
 class SingleTextRequest(BaseModel):
     text: str = Field(..., min_length=1, max_length=5000)
+    image_url: str | None = None
+    is_video: bool = False
 
 class BatchTextRequest(BaseModel):
     texts: list[str] = Field(..., min_items=1, max_items=500)
@@ -87,6 +90,20 @@ async def analyze_full_endpoint(body: SingleTextRequest):
         }
     except Exception as e:
         logger.error(f"Full analysis error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/verify")
+async def verify_claim_endpoint(body: SingleTextRequest):
+    """
+    Verify a claim using Gemini 1.5 Flash.
+    Returns truth_score, verdict, and explanation.
+    """
+    try:
+        result = await verify_claim(body.text, body.image_url, body.is_video)
+        return result
+    except Exception as e:
+        logger.error(f"Verification error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

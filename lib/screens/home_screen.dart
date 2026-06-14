@@ -496,22 +496,26 @@ class _FeedScreenState extends State<FeedScreen> {
                             if (_commentController.text.trim().isEmpty) return;
                             final auth = Provider.of<AuthProvider>(context, listen: false);
                             if (auth.user != null) {
-                              bool success;
+                              Map<String, dynamic> result;
                               if (_replyToId == null) {
-                                success = await ApiService.addComment(auth.user!.id, postId, _commentController.text.trim());
+                                result = await ApiService.addComment(auth.user!.id, postId, _commentController.text.trim());
                               } else {
-                                success = await ApiService.replyToComment(auth.user!.id, _replyToId!, _commentController.text.trim());
+                                result = await ApiService.replyToComment(auth.user!.id, _replyToId!, _commentController.text.trim());
                               }
 
-                              if (success) {
+                              if (result['success'] == true) {
                                 final newComments = await ApiService.getComments(postId);
                                 setModalState(() {
                                   _comments = newComments;
                                   _commentController.clear();
                                   _replyToId = null;
-                                  _repliesMap.clear(); 
+                                  _repliesMap.clear();
                                 });
                                 _fetchFeed(showLoading: false);
+                              } else if (result['message'] == 'CONTENT_TOO_TOXIC') {
+                                  _showToxicityAlert(result['detail'] ?? "Your response is too toxic to be published.");
+                              } else {
+                                  _showFeedback(result['message'] ?? "COMMENT_FAILED");
                               }
                             } else {
                               _showFeedback("LOGIN_REQUIRED_TO_COMMENT");
@@ -821,6 +825,36 @@ class _FeedScreenState extends State<FeedScreen> {
         duration: const Duration(milliseconds: 1500),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+  }
+
+  void _showToxicityAlert(String detail) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.darkPurple,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: const BorderSide(color: AppTheme.coral, width: 2),
+        ),
+        title: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded, color: AppTheme.coral),
+            const SizedBox(width: 10),
+            Text("CONTENT_BLOCKED", style: GoogleFonts.righteous(color: AppTheme.coral)),
+          ],
+        ),
+        content: Text(
+          detail,
+          style: GoogleFonts.spaceMono(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text("UNDERSTOOD", style: GoogleFonts.spaceMono(color: AppTheme.peach, fontWeight: FontWeight.bold)),
+          ),
+        ],
       ),
     );
   }
@@ -1346,11 +1380,153 @@ class _FeedScreenState extends State<FeedScreen> {
                         isSaved ? AppTheme.peach : Colors.white30, 
                         () => _handleSave(postId)
                       ),
+                      _buildActionButton(
+                        Icons.verified_user_rounded,
+                        'VERIFY',
+                        AppTheme.peach,
+                        () => _handleVerify(post)
+                      ),
                     ],
                   ),
                 ],
               ),
         ).animate().fade(duration: 400.ms, delay: (index * 100).ms).slideY(begin: 0.1); // Staggered Animation
+  }
+
+  Future<void> _handleVerify(dynamic post) async {
+    final postId = post['id'];
+    final content = post['content'] ?? "";
+    final mediaUrl = post['mediaUrl'];
+    final isVideo = post['isVideo'] ?? false;
+
+    // 1. Check if we already have the data in the post object (from feed)
+    if (post['truthScore'] != null) {
+      _showVerificationResult({
+        'verdict': post['truthVerdict'],
+        'truth_score': post['truthScore'],
+        'explanation': post['truthExplanation'],
+        'sources': post['truthSources']
+      });
+      return;
+    }
+
+    if (content.trim().isEmpty && mediaUrl == null) {
+      _showFeedback("NO_CONTENT_TO_VERIFY");
+      return;
+    }
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator(color: AppTheme.peach))
+    );
+
+    // If text is empty, send a placeholder or descriptive text to avoid backend rejection
+    final textToSend = content.trim().isEmpty ? "[IMAGE_ONLY_POST]" : content;
+
+    final result = await ApiService.verifyClaim(
+        textToSend, 
+        imageUrl: mediaUrl, 
+        isVideo: isVideo,
+        postId: postId
+    );
+    
+    if (!mounted) return;
+    Navigator.pop(context); // Close loading
+
+    if (result['success'] == true) {
+      _showVerificationResult(result);
+    } else {
+      _showFeedback(result['message'] ?? "VERIFICATION_FAILED");
+    }
+  }
+
+  void _showVerificationResult(Map<String, dynamic> data) {
+    final verdict = data['verdict'] ?? 'Unverified';
+    final isClaim = data['is_claim'] ?? true;
+    final score = (data['truth_score'] ?? 0.5) * 100;
+    final explanation = data['explanation'] ?? 'No explanation provided.';
+    final sources = data['sources'] as List? ?? [];
+
+    Color verdictColor;
+    IconData verdictIcon;
+    
+    switch (verdict.toString().toLowerCase()) {
+      case 'verified':
+        verdictColor = Colors.green;
+        verdictIcon = Icons.check_circle_rounded;
+        break;
+      case 'false':
+        verdictColor = Colors.redAccent;
+        verdictIcon = Icons.cancel_rounded;
+        break;
+      case 'partially true':
+        verdictColor = Colors.orange;
+        verdictIcon = Icons.warning_rounded;
+        break;
+      case 'not a claim':
+        verdictColor = Colors.white54;
+        verdictIcon = Icons.info_outline_rounded;
+        break;
+      default:
+        verdictColor = Colors.blue;
+        verdictIcon = Icons.help_rounded;
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.darkPurple,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: verdictColor.withOpacity(0.5), width: 2),
+        ),
+        title: Row(
+          children: [
+            Icon(verdictIcon, color: verdictColor),
+            const SizedBox(width: 10),
+            Text(verdict.toUpperCase(), style: GoogleFonts.righteous(color: verdictColor)),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (isClaim && verdict != 'Not a Claim')
+                Text(
+                  "Truth Score: ${score.toStringAsFixed(0)}%",
+                  style: GoogleFonts.spaceMono(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+              if (verdict == 'Not a Claim')
+                Text(
+                  "Non-Factual Content",
+                  style: GoogleFonts.spaceMono(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                ),
+              const SizedBox(height: 15),
+              Text(
+                explanation,
+                style: GoogleFonts.spaceMono(color: Colors.white70, fontSize: 12),
+              ),
+              if (sources.isNotEmpty && verdict != 'Not a Claim') ...[
+                const SizedBox(height: 15),
+                Text("Reliability signals:", style: GoogleFonts.spaceMono(color: AppTheme.peach, fontSize: 10, fontWeight: FontWeight.bold)),
+                ...sources.map((s) => Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text("• $s", style: GoogleFonts.spaceMono(color: Colors.white38, fontSize: 10)),
+                )).toList(),
+              ]
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text("CLOSE", style: GoogleFonts.spaceMono(color: AppTheme.peach, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildActionButton(IconData icon, String label, Color color, VoidCallback onTap) {

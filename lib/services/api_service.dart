@@ -242,15 +242,15 @@ class ApiService {
     } catch (e) { return false; }
   }
 
-  static Future<bool> addComment(String userId, String postId, String content) async {
+  static Future<Map<String, dynamic>> addComment(String userId, String postId, String content) async {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/posts/comment'),
         body: jsonEncode({'userId': userId, 'postId': postId, 'content': content}),
         headers: {'Content-Type': 'application/json'},
       );
-      return jsonDecode(response.body)['success'] ?? false;
-    } catch (e) { return false; }
+      return jsonDecode(response.body);
+    } catch (e) { return {'success': false}; }
   }
 
   static Future<List<dynamic>> getComments(String postId) async {
@@ -271,15 +271,15 @@ class ApiService {
     } catch (e) { return false; }
   }
 
-  static Future<bool> replyToComment(String userId, String commentId, String content) async {
+  static Future<Map<String, dynamic>> replyToComment(String userId, String commentId, String content) async {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/comments/$commentId/reply'),
         body: jsonEncode({'userId': userId, 'content': content}),
         headers: {'Content-Type': 'application/json'},
       );
-      return jsonDecode(response.body)['success'] ?? false;
-    } catch (e) { return false; }
+      return jsonDecode(response.body);
+    } catch (e) { return {'success': false}; }
   }
 
   static Future<List<dynamic>> getReplies(String commentId) async {
@@ -630,6 +630,25 @@ class ApiService {
       return jsonDecode(response.body);
     } catch (e) {
       return {'success': false, 'message': 'CONNECTION_ERROR'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> verifyClaim(String text, {String? imageUrl, bool isVideo = false, String? postId, String? commentId}) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/ai/verify'),
+        body: jsonEncode({
+          'text': text,
+          'imageUrl': imageUrl,
+          'isVideo': isVideo,
+          'postId': postId,
+          'commentId': commentId
+        }),
+        headers: {'Content-Type': 'application/json'},
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'success': false, 'message': 'VERIFICATION_FAILED'};
     }
   }
 }

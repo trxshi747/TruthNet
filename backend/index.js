@@ -434,16 +434,25 @@ app.get('/api/feed', async (req, res) => {
              ORDER BY p.createdAt DESC`,
             { userId: userId || "" }
         );
-        res.json(result.records.map(r => ({
-            author: r.get('author'),
-            authorId: r.get('authorId'),
-            ...r.get('post').properties,
-            likeCount: r.get('likeCount').toInt(),
-            commentCount: r.get('commentCount').toInt(),
-            shareCount: r.get('shareCount').toInt(),
-            isSaved: r.get('isSaved'),
-            isLiked: r.get('isLiked')
-        })));
+        res.json(result.records.map(r => {
+            const postProps = r.get('post').properties;
+            return {
+                author: r.get('author'),
+                authorId: r.get('authorId'),
+                ...postProps,
+                likeCount: r.get('likeCount').toInt(),
+                commentCount: r.get('commentCount').toInt(),
+                shareCount: r.get('shareCount').toInt(),
+                isSaved: r.get('isSaved'),
+                isLiked: r.get('isLiked'),
+                
+                // Explicitly mapping fact-check results
+                truthScore: postProps.truthScore,
+                truthVerdict: postProps.truthVerdict,
+                truthExplanation: postProps.truthExplanation,
+                truthSources: postProps.truthSources
+            };
+        }));
     } catch (e) { res.status(500).json([]); }
     finally { await session.close(); }
 });
@@ -776,7 +785,18 @@ app.get('/api/users/:userId/posts', async (req, res) => {
              ORDER BY p.createdAt DESC`,
             { userId }
         );
-        res.json(result.records.map(r => ({ author: r.get('author'), ...r.get('post').properties })));
+        res.json(result.records.map(r => {
+            const postProps = r.get('post').properties;
+            return {
+                author: r.get('author'),
+                ...postProps,
+                // Explicit mapping
+                truthScore: postProps.truthScore,
+                truthVerdict: postProps.truthVerdict,
+                truthExplanation: postProps.truthExplanation,
+                truthSources: postProps.truthSources
+            };
+        }));
     } catch (e) { res.status(500).json([]); }
     finally { await session.close(); }
 });
@@ -792,7 +812,18 @@ app.get('/api/users/:userId/archive', async (req, res) => {
              ORDER BY p.createdAt DESC`,
             { userId }
         );
-        res.json(result.records.map(r => ({ author: r.get('author'), ...r.get('post').properties })));
+        res.json(result.records.map(r => {
+            const postProps = r.get('post').properties;
+            return {
+                author: r.get('author'),
+                ...postProps,
+                // Explicit mapping
+                truthScore: postProps.truthScore,
+                truthVerdict: postProps.truthVerdict,
+                truthExplanation: postProps.truthExplanation,
+                truthSources: postProps.truthSources
+            };
+        }));
     } catch (e) { res.status(500).json([]); }
     finally { await session.close(); }
 });
@@ -806,6 +837,9 @@ app.post('/api/posts', upload.array('media', 10), async (req, res) => {
 
     // Handle multiple files
     const mediaUrls = req.files ? req.files.map(file => `/uploads/${file.filename}`) : [];
+    
+    // Maintain mediaUrl field for backward compatibility (first image)
+    const primaryMediaUrl = mediaUrls.length > 0 ? mediaUrls[0] : null;
 
     // Protocol Check: Strictly MP4 for videos
     if (isVideo) {
@@ -815,8 +849,52 @@ app.post('/api/posts', upload.array('media', 10), async (req, res) => {
       }
     }
 
-    // Maintain mediaUrl field for backward compatibility (first image)
-    const primaryMediaUrl = mediaUrls.length > 0 ? mediaUrls[0] : null;
+    // Toxicity Check
+    if (content && content.trim().length > 0) {
+        try {
+            const aiRes = await callAI('/analyze/toxicity', { text: content });
+            if (aiRes.success && aiRes.result && aiRes.result.degree === 'extreme') {
+                return res.status(400).json({ 
+                    success: false, 
+                    message: "CONTENT_TOO_TOXIC",
+                    detail: "Your content has been flagged as extremely toxic and cannot be published."
+                });
+            }
+        } catch (aiErr) {
+            console.warn("AI Toxicity check failed (skipping):", aiErr.message);
+        }
+    }
+
+    // --- NEW: Mandatory Fact-Check before publishing ---
+    let factCheckData = null;
+    try {
+        console.log(`[POST] Running mandatory fact-check for user ${userId}...`);
+        const factCheckRes = await callAI('/analyze/verify', { 
+            text: content || "[IMAGE_ONLY_POST]", 
+            image_url: primaryMediaUrl, 
+            is_video: isVideo 
+        });
+
+        if (factCheckRes.success) {
+            factCheckData = factCheckRes;
+            
+            // Block based on AI 'is_publishable' decision
+            if (factCheckRes.is_publishable === false) {
+                const isNonsense = factCheckRes.type === 'nonsense';
+                console.warn(`[POST] Publication blocked: ${factCheckRes.type} detected.`);
+                
+                return res.status(400).json({
+                    success: false,
+                    message: isNonsense ? "CONTENT_NONSENSE" : "CONTENT_UNVERIFIED",
+                    detail: factCheckRes.explanation,
+                    verdict: factCheckRes.verdict,
+                    truth_score: factCheckRes.truth_score
+                });
+            }
+        }
+    } catch (fcErr) {
+        console.warn("AI Fact-check failed (skipping to allow publication):", fcErr.message);
+    }
 
     const session = driver.session();
     try {
@@ -831,11 +909,29 @@ app.post('/api/posts', upload.array('media', 10), async (req, res) => {
                 isVideo: $isVideo,
                 visibility: $visibility,
                 isDeleted: false,
-                createdAt: timestamp()
+                createdAt: timestamp(),
+                
+                // Store fact-check results
+                truthScore: $truthScore,
+                truthVerdict: $truthVerdict,
+                truthExplanation: $truthExplanation,
+                truthSources: $truthSources
              })
              CREATE (u)-[:OWNS_POST]->(p)
              RETURN p`,
-            { userId, content, primaryMediaUrl, mediaUrls, location: location || null, isVideo, visibility }
+            { 
+                userId, 
+                content, 
+                primaryMediaUrl, 
+                mediaUrls, 
+                location: location || null, 
+                isVideo, 
+                visibility,
+                truthScore: factCheckData ? factCheckData.truth_score : null,
+                truthVerdict: factCheckData ? factCheckData.verdict : null,
+                truthExplanation: factCheckData ? factCheckData.explanation : null,
+                truthSources: factCheckData ? (factCheckData.sources || []) : []
+            }
         );
         res.json(result.records[0].get('p').properties);
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
@@ -927,15 +1023,22 @@ app.get('/api/posts/:postId', async (req, res) => {
         );
         if (result.records.length > 0) {
             const r = result.records[0];
+            const postProps = r.get('post').properties;
             res.json({
                 author: r.get('author'),
                 authorId: r.get('authorId'),
-                ...r.get('post').properties,
+                ...postProps,
                 likeCount: r.get('likeCount').toInt(),
                 commentCount: r.get('commentCount').toInt(),
                 shareCount: r.get('shareCount').toInt(),
                 isSaved: r.get('isSaved'),
-                isLiked: r.get('isLiked')
+                isLiked: r.get('isLiked'),
+                
+                // Stored fact-check
+                truthScore: postProps.truthScore,
+                truthVerdict: postProps.truthVerdict,
+                truthExplanation: postProps.truthExplanation,
+                truthSources: postProps.truthSources
             });
         } else {
             res.status(404).json({ message: "POST_NOT_FOUND" });
@@ -956,13 +1059,22 @@ app.get('/api/posts/:postId/comments', async (req, res) => {
              ORDER BY c.createdAt ASC`,
             { postId }
         );
-        res.json(result.records.map(r => ({
-            author: r.get('author'),
-            authorId: r.get('authorId'),
-            ...r.get('comment').properties,
-            likeCount: r.get('likeCount').toInt(),
-            replyCount: r.get('replyCount').toInt()
-        })));
+        res.json(result.records.map(r => {
+            const props = r.get('comment').properties;
+            return {
+                author: r.get('author'),
+                authorId: r.get('authorId'),
+                ...props,
+                likeCount: r.get('likeCount').toInt(),
+                replyCount: r.get('replyCount').toInt(),
+                
+                // Stored fact-check
+                truthScore: props.truthScore,
+                truthVerdict: props.truthVerdict,
+                truthExplanation: props.truthExplanation,
+                truthSources: props.truthSources
+            };
+        }));
     } catch (e) { res.status(500).json([]); }
     finally { await session.close(); }
 });
@@ -1014,16 +1126,72 @@ app.post('/api/comments/:commentId/like', async (req, res) => {
 
 app.post('/api/posts/comment', async (req, res) => {
     const { userId, postId, content } = req.body;
+
+    // Toxicity Check
+    if (content && content.trim().length > 0) {
+        try {
+            const aiRes = await callAI('/analyze/toxicity', { text: content });
+            if (aiRes.success && aiRes.result && aiRes.result.degree === 'extreme') {
+                return res.status(400).json({ 
+                    success: false, 
+                    message: "CONTENT_TOO_TOXIC",
+                    detail: "Your comment has been flagged as extremely toxic and cannot be published."
+                });
+            }
+        } catch (aiErr) {
+            console.warn("AI Toxicity check failed (skipping):", aiErr.message);
+        }
+    }
+
+    // --- NEW: Mandatory Fact-Check before publishing ---
+    let factCheckData = null;
+    try {
+        console.log(`[COMMENT] Running mandatory fact-check for user ${userId}...`);
+        const factCheckRes = await callAI('/analyze/verify', { 
+            text: content
+        });
+
+        if (factCheckRes.success) {
+            factCheckData = factCheckRes;
+            if (factCheckRes.truth_score < 0.3) {
+                return res.status(400).json({
+                    success: false,
+                    message: "CONTENT_UNVERIFIED",
+                    detail: factCheckRes.explanation,
+                    verdict: factCheckRes.verdict,
+                    truth_score: factCheckRes.truth_score
+                });
+            }
+        }
+    } catch (fcErr) {
+        console.warn("AI Fact-check failed (skipping):", fcErr.message);
+    }
+
     const session = driver.session();
     try {
         const result = await session.run(
             `MATCH (u:User {id: $userId}), (p:Post {id: $postId})<-[:OWNS_POST]-(owner:User)
-             CREATE (c:Comment {id: randomUUID(), content: $content, createdAt: timestamp()})
+             CREATE (c:Comment {
+                id: randomUUID(), 
+                content: $content, 
+                createdAt: timestamp(),
+                // Store fact-check results
+                truthScore: $truthScore,
+                truthVerdict: $truthVerdict,
+                truthExplanation: $truthExplanation,
+                truthSources: $truthSources
+             })
              CREATE (u)-[:OWNS_COMMENT]->(c)
              CREATE (c)-[:TARGETS]->(p)
              CREATE (p)-[:HAS_COMMENT]->(c)
              RETURN c, owner.id as ownerId`,
-            { userId, postId, content }
+            { 
+                userId, postId, content,
+                truthScore: factCheckData ? factCheckData.truth_score : null,
+                truthVerdict: factCheckData ? factCheckData.verdict : null,
+                truthExplanation: factCheckData ? factCheckData.explanation : null,
+                truthSources: factCheckData ? (factCheckData.sources || []) : []
+            }
         );
         const comment = result.records[0].get('c').properties;
         const ownerId = result.records[0].get('ownerId');
@@ -1039,18 +1207,66 @@ app.post('/api/posts/comment', async (req, res) => {
 app.post('/api/comments/:commentId/reply', async (req, res) => {
     const { userId, content } = req.body;
     const { commentId } = req.params;
+
+    // Toxicity Check
+    if (content && content.trim().length > 0) {
+        try {
+            const aiRes = await callAI('/analyze/toxicity', { text: content });
+            if (aiRes.success && aiRes.result && aiRes.result.degree === 'extreme') {
+                return res.status(400).json({ 
+                    success: false, 
+                    message: "CONTENT_TOO_TOXIC",
+                    detail: "Your reply has been flagged as extremely toxic and cannot be published."
+                });
+            }
+        } catch (aiErr) {
+            console.warn("AI Toxicity check failed (skipping):", aiErr.message);
+        }
+    }
+
+    // --- NEW: Mandatory Fact-Check before publishing ---
+    let factCheckData = null;
+    try {
+        const factCheckRes = await callAI('/analyze/verify', { text: content });
+        if (factCheckRes.success) {
+            factCheckData = factCheckRes;
+            if (factCheckRes.truth_score < 0.3) {
+                return res.status(400).json({
+                    success: false,
+                    message: "CONTENT_UNVERIFIED",
+                    detail: factCheckRes.explanation
+                });
+            }
+        }
+    } catch (fcErr) {}
+
     const session = driver.session();
     try {
         const result = await session.run(
             `MATCH (u:User {id: $userId})
              MATCH (target:Comment {id: $commentId})<-[:OWNS_COMMENT]-(owner:User)
              MATCH (target)-[:TARGETS*1..]->(p:Post)
-             CREATE (reply:Comment {id: randomUUID(), content: $content, createdAt: timestamp()})
+             CREATE (reply:Comment {
+                id: randomUUID(), 
+                content: $content, 
+                createdAt: timestamp(),
+                // Store fact-check results
+                truthScore: $truthScore,
+                truthVerdict: $truthVerdict,
+                truthExplanation: $truthExplanation,
+                truthSources: $truthSources
+             })
              CREATE (u)-[:OWNS_COMMENT]->(reply)
              CREATE (reply)-[:REPLIED_TO]->(target)
              CREATE (reply)-[:TARGETS]->(p)
              RETURN reply, owner.id as ownerId, p.id as postId`,
-            { userId, commentId, content }
+            { 
+                userId, commentId, content,
+                truthScore: factCheckData ? factCheckData.truth_score : null,
+                truthVerdict: factCheckData ? factCheckData.verdict : null,
+                truthExplanation: factCheckData ? factCheckData.explanation : null,
+                truthSources: factCheckData ? (factCheckData.sources || []) : []
+            }
         );
         const reply = result.records[0].get('reply').properties;
         const ownerId = result.records[0].get('ownerId');
@@ -1551,7 +1767,7 @@ async function autoLiftExpiredSuspensions() {
 
         const expired = await session.run(`
             MATCH (s:Sanction {type: 'SUSPENSION', status: 'ACTIVE'})
-            WHERE s.endDate < datetime($now)
+            WHERE s.endDate < $now
             RETURN s.id as sanctionId
         `, { now });
 
@@ -2131,6 +2347,56 @@ app.post('/api/ai/analyze/comment', async (req, res) => {
     } catch (e) {
         console.error('AI analyze/comment error:', e.message);
         res.status(503).json({ success: false, message: 'AI service unavailable' });
+    }
+});
+
+// ── POST /api/ai/verify ──────────────────────────────────────────────────────
+// Verify a claim using Gemini (called on demand from the UI)
+app.post('/api/ai/verify', async (req, res) => {
+    const { text, imageUrl, isVideo, postId, commentId } = req.body;
+    if (!text && !imageUrl) return res.status(400).json({ success: false, message: 'content is required' });
+
+    const session = driver.session();
+    try {
+        // 1. Check if we have a stored fact-check for this post/comment
+        if (postId || commentId) {
+            const id = postId || commentId;
+            const label = postId ? 'Post' : 'Comment';
+            const checkRes = await session.run(
+                `MATCH (n:${label} {id: $id}) 
+                 RETURN n.truthScore as truthScore, n.truthVerdict as truthVerdict, 
+                        n.truthExplanation as truthExplanation, n.truthSources as truthSources`,
+                { id }
+            );
+
+            if (checkRes.records.length > 0) {
+                const record = checkRes.records[0];
+                const truthScore = record.get('truthScore');
+                if (truthScore !== null) {
+                    console.log(`[AI] Returning cached fact-check for ${label} ${id}`);
+                    return res.json({
+                        success: true,
+                        truth_score: truthScore,
+                        verdict: record.get('truthVerdict'),
+                        explanation: record.get('truthExplanation'),
+                        sources: record.get('truthSources')
+                    });
+                }
+            }
+        }
+
+        // 2. If no cache, call AI
+        const result = await callAI('/analyze/verify', { 
+            text: text || "[IMAGE_ONLY_POST]", 
+            image_url: imageUrl, 
+            is_video: isVideo || false 
+        });
+        res.json(result);
+    } catch (e) {
+        console.error('AI verify error:', e.message);
+        res.status(503).json({ success: false, message: 'AI service unavailable' });
+    } finally {
+        await session.close();
     }
 });
 
