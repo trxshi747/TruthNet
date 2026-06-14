@@ -271,33 +271,34 @@ class _FeedScreenState extends State<FeedScreen> {
                                             }
                                           });
                                         }),
-                                        if (isOwner) ...[
-                                          const SizedBox(width: 5),
-                                          PopupMenuButton<String>(
-                                            icon: const Icon(Icons.more_vert_rounded, size: 14, color: Colors.white24),
-                                            padding: EdgeInsets.zero,
-                                            constraints: const BoxConstraints(minWidth: 80),
-                                            color: AppTheme.mediumPurple,
-                                            onSelected: (val) {
-                                              if (val == 'edit') {
-                                                _showEditCommentDialog(commentId, comment['content'], () async {
-                                                  final updated = await ApiService.getComments(postId);
-                                                  setModalState(() => _comments = updated);
-                                                });
-                                              } else if (val == 'delete') {
-                                                _handleDeleteComment(commentId, () async {
-                                                  final updated = await ApiService.getComments(postId);
-                                                  setModalState(() => _comments = updated);
-                                                  _fetchFeed();
-                                                });
-                                              }
-                                            },
-                                            itemBuilder: (context) => [
-                                              PopupMenuItem(value: 'edit', child: Text("EDIT", style: GoogleFonts.spaceMono(fontSize: 10, color: Colors.white))),
-                                              PopupMenuItem(value: 'delete', child: Text("DELETE", style: GoogleFonts.spaceMono(fontSize: 10, color: AppTheme.coral))),
-                                            ],
-                                          ),
-                                        ],
+                                        const SizedBox(width: 5),
+                                        PopupMenuButton<String>(
+                                          icon: const Icon(Icons.more_vert_rounded, size: 14, color: Colors.white24),
+                                          padding: EdgeInsets.zero,
+                                          constraints: const BoxConstraints(minWidth: 80),
+                                          color: AppTheme.mediumPurple,
+                                          onSelected: (val) {
+                                            if (val == 'edit') {
+                                              _showEditCommentDialog(commentId, comment['content'], () async {
+                                                final updated = await ApiService.getComments(postId);
+                                                setModalState(() => _comments = updated);
+                                              });
+                                            } else if (val == 'delete') {
+                                              _handleDeleteComment(commentId, () async {
+                                                final updated = await ApiService.getComments(postId);
+                                                setModalState(() => _comments = updated);
+                                                _fetchFeed();
+                                              });
+                                            } else if (val == 'report') {
+                                              _showReportDialog(commentId, 'Comment');
+                                            }
+                                          },
+                                          itemBuilder: (context) => [
+                                            if (isOwner) PopupMenuItem(value: 'edit', child: Text("EDIT", style: GoogleFonts.spaceMono(fontSize: 10, color: Colors.white))),
+                                            if (isOwner) PopupMenuItem(value: 'delete', child: Text("DELETE", style: GoogleFonts.spaceMono(fontSize: 10, color: AppTheme.coral))),
+                                            if (!isOwner) PopupMenuItem(value: 'report', child: Text("REPORT", style: GoogleFonts.spaceMono(fontSize: 10, color: AppTheme.coral))),
+                                          ],
+                                        ),
                                       ],
                                     ),
                                     _buildRichText(comment['content'] ?? "", fontSize: 13),
@@ -357,34 +358,35 @@ class _FeedScreenState extends State<FeedScreen> {
                                                              }
                                                            });
                                                          }),
-                                                         if (isReplyOwner) ...[
-                                                           const SizedBox(width: 5),
-                                                           PopupMenuButton<String>(
-                                                              icon: const Icon(Icons.more_vert_rounded, size: 12, color: Colors.white24),
-                                                              padding: EdgeInsets.zero,
-                                                              constraints: const BoxConstraints(minWidth: 80),
-                                                              color: AppTheme.mediumPurple,
-                                                              onSelected: (val) {
-                                                                if (val == 'edit') {
-                                                                  _showEditCommentDialog(reply['id'], reply['content'], () async {
-                                                                    final updatedReplies = await ApiService.getReplies(commentId);
-                                                                    setModalState(() => _repliesMap[commentId] = updatedReplies);
-                                                                  });
-                                                                } else if (val == 'delete') {
-                                                                  _handleDeleteComment(reply['id'], () async {
-                                                                    final updatedReplies = await ApiService.getReplies(commentId);
-                                                                    setModalState(() => _repliesMap[commentId] = updatedReplies);
-                                                                    final updatedComments = await ApiService.getComments(postId);
-                                                                    setModalState(() => _comments = updatedComments);
-                                                                  });
-                                                                }
-                                                              },
-                                                              itemBuilder: (context) => [
-                                                                PopupMenuItem(value: 'edit', child: Text("EDIT", style: GoogleFonts.spaceMono(fontSize: 10, color: Colors.white))),
-                                                                PopupMenuItem(value: 'delete', child: Text("DELETE", style: GoogleFonts.spaceMono(fontSize: 10, color: AppTheme.coral))),
-                                                              ],
-                                                            ),
-                                                         ],
+                                                         const SizedBox(width: 5),
+                                                         PopupMenuButton<String>(
+                                                             icon: const Icon(Icons.more_vert_rounded, size: 12, color: Colors.white24),
+                                                             padding: EdgeInsets.zero,
+                                                             constraints: const BoxConstraints(minWidth: 80),
+                                                             color: AppTheme.mediumPurple,
+                                                             onSelected: (val) {
+                                                               if (val == 'edit') {
+                                                                 _showEditCommentDialog(reply['id'], reply['content'], () async {
+                                                                   final updatedReplies = await ApiService.getReplies(commentId);
+                                                                   setModalState(() => _repliesMap[commentId] = updatedReplies);
+                                                                 });
+                                                               } else if (val == 'delete') {
+                                                                 _handleDeleteComment(reply['id'], () async {
+                                                                   final updatedReplies = await ApiService.getReplies(commentId);
+                                                                   setModalState(() => _repliesMap[commentId] = updatedReplies);
+                                                                   final updatedComments = await ApiService.getComments(postId);
+                                                                   setModalState(() => _comments = updatedComments);
+                                                                 });
+                                                               } else if (val == 'report') {
+                                                                 _showReportDialog(reply['id'], 'Comment');
+                                                               }
+                                                             },
+                                                             itemBuilder: (context) => [
+                                                               if (isReplyOwner) PopupMenuItem(value: 'edit', child: Text("EDIT", style: GoogleFonts.spaceMono(fontSize: 10, color: Colors.white))),
+                                                               if (isReplyOwner) PopupMenuItem(value: 'delete', child: Text("DELETE", style: GoogleFonts.spaceMono(fontSize: 10, color: AppTheme.coral))),
+                                                               if (!isReplyOwner) PopupMenuItem(value: 'report', child: Text("REPORT", style: GoogleFonts.spaceMono(fontSize: 10, color: AppTheme.coral))),
+                                                             ],
+                                                           ),
                                                        ],
                                                      ),
                                                      _buildRichText(reply['content'] ?? "", fontSize: 12, defaultColor: Colors.white70),
@@ -611,6 +613,98 @@ class _FeedScreenState extends State<FeedScreen> {
         _showFeedback("ERASE_FAILED_UNAUTHORIZED");
       }
     }
+  }
+
+  void _showReportDialog(String targetId, String targetType) {
+    String selectedReason = 'Spam';
+    final List<String> reasons = ['Spam', 'Harassment', 'Hate Speech', 'False Information', 'Other'];
+    final TextEditingController _otherReasonController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: AppTheme.mediumPurple.withOpacity(0.95),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+                side: BorderSide(color: AppTheme.peach.withOpacity(0.5)),
+              ),
+              title: Text("REPORT_$targetType".toUpperCase(), style: GoogleFonts.righteous(color: AppTheme.peach)),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text("Please select a reason:", style: GoogleFonts.spaceMono(color: Colors.white)),
+                    const SizedBox(height: 10),
+                    ...reasons.map((reason) => RadioListTile<String>(
+                          title: Text(reason, style: GoogleFonts.spaceMono(color: Colors.white70)),
+                          value: reason,
+                          groupValue: selectedReason,
+                          activeColor: AppTheme.peach,
+                          onChanged: (val) {
+                            if (val != null) setDialogState(() => selectedReason = val);
+                          },
+                        )),
+                    if (selectedReason == 'Other') ...[
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: _otherReasonController,
+                        style: GoogleFonts.spaceMono(color: Colors.white),
+                        decoration: InputDecoration(
+                          hintText: "Specify the reason...",
+                          hintStyle: GoogleFonts.spaceMono(color: Colors.white24),
+                          enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
+                          focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: AppTheme.peach)),
+                        ),
+                      ),
+                    ]
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text("CANCEL", style: GoogleFonts.spaceMono(color: Colors.white54)),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.coral,
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: () async {
+                    String finalReason = selectedReason;
+                    if (selectedReason == 'Other') {
+                      if (_otherReasonController.text.trim().isEmpty) {
+                         _showFeedback("PLEASE_SPECIFY_REASON");
+                         return;
+                      }
+                      finalReason = "Other: ${_otherReasonController.text.trim()}";
+                    }
+
+                    final auth = Provider.of<AuthProvider>(context, listen: false);
+                    final success = await ApiService.reportItem(
+                      reporterId: auth.user!.id,
+                      targetId: targetId,
+                      targetType: targetType,
+                      reason: finalReason,
+                    );
+                    Navigator.pop(context);
+                    if (success) {
+                      _showFeedback("REPORT_SUBMITTED");
+                    } else {
+                      _showFeedback("REPORT_FAILED");
+                    }
+                  },
+                  child: Text("SUBMIT", style: GoogleFonts.spaceMono(fontWeight: FontWeight.bold)),
+                ),
+              ],
+            );
+          }
+        );
+      },
+    );
   }
 
   void _showEditDialog(String postId, String currentContent) {
@@ -1184,10 +1278,20 @@ class _FeedScreenState extends State<FeedScreen> {
                             ),
                           ],
                         )
-                      else
-                        IconButton(
+                      else if (auth.user != null)
+                        PopupMenuButton<String>(
                           icon: const Icon(Icons.more_horiz_rounded, color: Colors.white30),
-                          onPressed: () => _showFeedback("REPORTING_PROTOCOL_INITIATED..."),
+                          color: AppTheme.mediumPurple,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10), side: BorderSide(color: Colors.white10)),
+                          onSelected: (value) {
+                            if (value == 'report') _showReportDialog(postId, 'Post');
+                          },
+                          itemBuilder: (context) => [
+                            PopupMenuItem(
+                              value: 'report',
+                              child: Text("REPORT_TRANSMISSION", style: GoogleFonts.spaceMono(color: AppTheme.coral)),
+                            ),
+                          ],
                         ),
                     ],
                   ),

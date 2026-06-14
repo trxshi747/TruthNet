@@ -49,33 +49,8 @@ def _degree(score: float) -> str:
     return "low"
 
 
-def analyze_toxicity(text: str) -> dict:
-    """
-    Analyse toxicity of a single text.
-
-    Returns:
-    {
-        "is_toxic":          bool,
-        "toxic_score":       0.0-1.0,   # main toxicity confidence
-        "degree":            "low" | "moderate" | "high" | "extreme",
-        "flags": {
-            "severe_toxic":   float,
-            "obscene":        float,
-            "threat":         float,
-            "insult":         float,
-            "identity_hate":  float,
-        },
-        "has_severe_flag":   bool,      # any severe label above threshold
-        "categories":        list[str], # active categories (score > 0.30)
-    }
-    """
-    clf = _get_pipeline()
-
-    if not text or not text.strip():
-        return _clean_result()
-
-    raw: list[dict] = clf(text[:512])[0]
-
+def format_single_raw_result(raw: list[dict]) -> dict:
+    """Helper to format HuggingFace raw multi-label output."""
     # Build scores dict
     scores: dict[str, float] = {}
     for item in raw:
@@ -112,8 +87,18 @@ def analyze_toxicity(text: str) -> dict:
     }
 
 
-# def analyze_batch(texts: list[str]) -> list[dict]:
-#     return [analyze_toxicity(t) for t in texts]
+def analyze_toxicity(text: str) -> dict:
+    """
+    Analyse toxicity of a single text.
+    """
+    clf = _get_pipeline()
+
+    if not text or not text.strip():
+        return _clean_result()
+
+    raw: list[dict] = clf(text[:512])[0]
+    return format_single_raw_result(raw)
+
 
 def analyze_batch(texts: list[str]) -> list[dict]:
     """Analyse plusieurs textes de manière vectorisée et performante."""
@@ -130,8 +115,6 @@ def analyze_batch(texts: list[str]) -> list[dict]:
     # Il ne te reste plus qu'à formater la liste de résultats reçue
     formatted_results = []
     for raw in raw_results:
-        # Si top_k=None, raw est une liste de dicts dicts [{'label':..., 'score':...}, ...]
-        # Applique ta logique de normalisation ici pour chaque élément
         formatted_results.append(format_single_raw_result(raw))
         
     return formatted_results

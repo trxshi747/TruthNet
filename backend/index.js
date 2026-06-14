@@ -177,12 +177,15 @@ app.post('/api/auth/register', async (req, res) => {
     const targetRole = role || "Member";
     const isStandardUser = targetRole === "Member";
 
+    const userId = require('crypto').randomUUID();
+    const profileId = require('crypto').randomUUID();
+
     let result;
     if (isStandardUser) {
         result = await session.run(`
           MERGE (r:Role {name: $roleName})
           CREATE (u:User:AuthenticatedUser {
-            id:               randomUUID(),
+            id:               $userId,
             firstName:        $firstName,
             lastName:         $lastName,
             username:         $username,
@@ -192,7 +195,7 @@ app.post('/api/auth/register', async (req, res) => {
             registrationDate: timestamp()
           })
           CREATE (p:Profile {
-            id:              randomUUID(),
+            id:              $profileId,
             bio:             '',
             avatar:          null,
             privacyLevel:    'public',
@@ -202,13 +205,13 @@ app.post('/api/auth/register', async (req, res) => {
           CREATE (u)-[:HAS_ROLE]->(r)
           CREATE (u)-[:HAS_PROFILE]->(p)
           RETURN u, r.name as role
-        `, { email, hashedPassword, firstName, lastName, username, roleName: targetRole });
+        `, { email, hashedPassword, firstName, lastName, username, roleName: targetRole, userId, profileId });
     } else {
         const userLabel = targetRole === "Admin" ? "Administrator" : "Moderator";
         result = await session.run(`
           MERGE (r:Role {name: $roleName})
           CREATE (u:User:${userLabel} {
-            id:               randomUUID(),
+            id:               $userId,
             firstName:        $firstName,
             lastName:         $lastName,
             username:         $username,
@@ -219,7 +222,7 @@ app.post('/api/auth/register', async (req, res) => {
           })
           CREATE (u)-[:HAS_ROLE]->(r)
           RETURN u, r.name as role
-        `, { email, hashedPassword, firstName, lastName, username, roleName: targetRole });
+        `, { email, hashedPassword, firstName, lastName, username, roleName: targetRole, userId });
     }
 
     const user = result.records[0].get('u').properties;
@@ -237,24 +240,75 @@ app.post('/api/auth/register', async (req, res) => {
 });
 
 app.post('/api/auth/login', async (req, res) => {
-    const { email, password } = req.body; // Keeping field name 'email' for compatibility, but using it as identifier
+    const { email, password } = req.body;
     const session = driver.session();
     try {
         const result = await session.run(
-            'MATCH (u:User) WHERE u.email = $email OR u.username = $email ' +
-            'MATCH (u)-[:HAS_ROLE]->(r:Role) RETURN u, r.name as role', 
+            `MATCH (u:User) WHERE u.email = $email OR u.username = $email
+             OPTIONAL MATCH (u)-[:HAS_ROLE]->(r:Role)
+             OPTIONAL MATCH (u)-[:HAS_SANCTION]->(s:Sanction {status: 'ACTIVE'})
+             RETURN u, r.name as role, collect(s) as sanctions`, 
             { email }
         );
+
         if (result.records.length > 0) {
-            const user = result.records[0].get('u').properties;
+            const firstRecord = result.records[0];
+            const user = firstRecord.get('u').properties;
+            const role = firstRecord.get('role');
+            const sanctions = firstRecord.get('sanctions').map(s => s.properties);
+
             if (await bcrypt.compare(password, user.password)) {
-                res.json({ success: true, user: { ...user, role: result.records[0].get('role') } });
-            } else res.status(401).json({ success: false, message: "INVALID_CREDENTIALS" });
-        } else res.status(401).json({ success: false, message: "USER_NOT_FOUND" });
+                // Check status
+                const status = (user.status || 'ACTIVE').toUpperCase();
+                
+                if (status === 'INACTIVE') {
+                    return res.status(403).json({ 
+                        success: false, 
+                        message: "ACCOUNT_DEACTIVATED",
+                        detail: "Your account has been deactivated by an administrator."
+                    });
+                }
+
+                if (status === 'BANNED') {
+                    return res.status(403).json({ 
+                        success: false, 
+                        message: "ACCOUNT_BANNED",
+                        detail: "Your account has been permanently banned."
+                    });
+                }
+
+                if (status === 'SUSPENDED') {
+                    const now = new Date();
+                    // Check if ANY active sanction is still in the future
+                    const activeSanction = sanctions.find(s => s.endDate && new Date(s.endDate) > now);
+                    
+                    if (activeSanction) {
+                        return res.status(403).json({ 
+                            success: false, 
+                            message: "ACCOUNT_SUSPENDED",
+                            detail: `Your account is suspended until ${activeSanction.endDate}.`,
+                            until: activeSanction.endDate
+                        });
+                    } else {
+                        // All sanctions expired, reactivate user
+                        await session.run('MATCH (u:User {id: $id}) SET u.status = "ACTIVE"', { id: user.id });
+                        user.status = 'ACTIVE';
+                    }
+                }
+
+                res.json({ success: true, user: { ...user, role } });
+            } else {
+                res.status(401).json({ success: false, message: "INVALID_CREDENTIALS" });
+            }
+        } else {
+            res.status(401).json({ success: false, message: "USER_NOT_FOUND" });
+        }
     } catch (e) {
         console.error("DB Error:", e.message);
         res.status(500).json({ success: false, message: e.message });
-    } finally { await session.close(); }
+    } finally {
+        await session.close();
+    }
 });
 
 // --- SETTINGS & ACCOUNT ---
@@ -617,7 +671,12 @@ app.get('/api/admin/dashboard', async (req, res) => {
             MATCH (c:Comment)
             WITH users, posts, count(c) as comments
 
-            RETURN users, posts, comments
+            OPTIONAL MATCH ()-[r:REPORTED]->()
+            WITH users, posts, comments, count(r) as reports,
+                 sum(CASE WHEN r.status = 'pending' THEN 1 ELSE 0 END) as pendingReports,
+                 sum(CASE WHEN r.status = 'resolved' THEN 1 ELSE 0 END) as resolvedReports
+
+            RETURN users, posts, comments, reports, pendingReports, resolvedReports
         `);
 
         const record = result.records[0];
@@ -625,7 +684,10 @@ app.get('/api/admin/dashboard', async (req, res) => {
         res.json({
             users: record.get('users').toInt(),
             posts: record.get('posts').toInt(),
-            comments: record.get('comments').toInt()
+            comments: record.get('comments').toInt(),
+            reports: record.get('reports').toInt(),
+            pendingReports: record.get('pendingReports').toInt(),
+            resolvedReports: record.get('resolvedReports').toInt()
         });
 
     } catch (e) {
@@ -1116,6 +1178,8 @@ app.get('/api/admin/users', async (req, res) => {
             MATCH (u:User)-[:HAS_ROLE]->(r:Role {name: 'Member'})
             OPTIONAL MATCH (u)-[:HAS_PROFILE]->(p:Profile)
             OPTIONAL MATCH (u)-[:HAS_SANCTION]->(s:Sanction {status: 'ACTIVE'})
+            WITH u, r, p, s ORDER BY s.startDate DESC
+            WITH u, r, p, collect(s)[0] as latestSanction
             RETURN
                 u.id                AS id,
                 u.firstName         AS firstName,
@@ -1127,10 +1191,10 @@ app.get('/api/admin/users', async (req, res) => {
                 r.name              AS role,
                 p.bio               AS bio,
                 p.avatar            AS avatar,
-                s.id                AS sanctionId,
-                s.type              AS sanctionType,
-                s.reason            AS sanctionReason,
-                s.endDate           AS sanctionEndDate
+                latestSanction.id   AS sanctionId,
+                latestSanction.type AS sanctionType,
+                latestSanction.reason AS sanctionReason,
+                latestSanction.endDate AS sanctionEndDate
         `);
 
         const users = result.records.map(record => {
@@ -1186,21 +1250,27 @@ app.get('/api/admin/users', async (req, res) => {
 // Sanction corrigée avec les bons noms de champs
 app.put('/api/admin/users/:userId/suspend', async (req, res) => {
   const { userId } = req.params;
-  const { reason, durationDays, adminId } = req.body;
+  const { reason, durationDays, endDate: customEndDate, adminId } = req.body;
   const session = driver.session();
 
   const sanctionId = require('crypto').randomUUID();
   const startDate  = new Date().toISOString();
-  const endDate    = new Date(
-    Date.now() + durationDays * 24 * 60 * 60 * 1000
-  ).toISOString();
+  
+  let endDate;
+  if (customEndDate) {
+    endDate = new Date(customEndDate).toISOString();
+  } else {
+    endDate = new Date(
+      Date.now() + (durationDays || 1) * 24 * 60 * 60 * 1000
+    ).toISOString();
+  }
 
   try {
     await session.run(`
       MATCH (u:User {id: $userId})
       CREATE (s:Sanction {
         id:            $sanctionId,
-        type:          'SUSPENDED',
+        type:          'SUSPENSION',
         reason:        $reason,
         startDate:     $startDate,
         endDate:       $endDate,
@@ -1363,20 +1433,33 @@ app.put('/api/admin/users/:userId/deactivate', async (req, res) => {
 // ACTIVATE a user (reactivate)
 app.put('/api/admin/users/:userId/activate', async (req, res) => {
     const { userId } = req.params;
+    const { adminId } = req.body;
 
     const session = driver.session();
 
     try {
+        // 1. Reactivate user
         await session.run(
             `MATCH (u:User {id: $userId})
-             SET u.status = 'ACTIVE'
+             SET u.status = 'ACTIVE',
+                 u.activeSanctionId = null
              RETURN u`,
             { userId }
         );
 
+        // 2. Revoke any active sanctions
+        await session.run(
+            `MATCH (u:User {id: $userId})-[:HAS_SANCTION]->(s:Sanction {status: 'ACTIVE'})
+             SET s.status = 'REVOKED',
+                 s.revokedAt = timestamp(),
+                 s.revokedBy = $adminId
+             RETURN s`,
+            { userId, adminId: adminId || 'SYSTEM' }
+        );
+
         res.json({
             success: true,
-            message: "User activated successfully"
+            message: "User activated successfully and sanctions revoked"
         });
 
     } catch (error) {
@@ -1517,10 +1600,14 @@ app.get('/api/admin/moderators', async (req, res) => {
             RETURN u, r.name as role
         `);
 
-        const moderators = result.records.map(r => ({
-            ...r.get('u').properties,
-            role: r.get('role')
-        }));
+        const moderators = result.records.map(r => {
+            const props = r.get('u').properties;
+            return {
+                ...props,
+                name: `${props.firstName || ''} ${props.lastName || ''}`.trim(),
+                role: r.get('role')
+            };
+        });
 
         res.json(moderators);
 
@@ -1533,7 +1620,18 @@ app.get('/api/admin/moderators', async (req, res) => {
 
 // add moderator
 app.post('/api/admin/moderators', async (req, res) => {
-    const { firstName, lastName, username, email, password, status } = req.body;
+    let { firstName, lastName, name, username, email, password, status } = req.body;
+
+    // Handle 'name' from frontend if firstName/lastName are missing
+    if (name && !firstName) {
+        const parts = name.trim().split(/\s+/);
+        firstName = parts[0];
+        lastName = parts.slice(1).join(' ');
+    }
+
+    firstName = firstName || 'Moderator';
+    lastName = lastName || '';
+    status = status || 'ACTIVE';
 
     // Username validation: Alphanumeric only
     const usernameRegex = /^[a-zA-Z0-9]+$/;
@@ -1573,10 +1671,11 @@ app.post('/api/admin/moderators', async (req, res) => {
 
         const hashedPassword = await bcrypt.hash(password, 10);
 
+        const id = require('crypto').randomUUID();
         await session.run(`
             MERGE (r:Role {name: "Moderator"})
             CREATE (u:User:AuthenticatedUser:Moderator {
-                id:               randomUUID(),
+                id:               $id,
                 firstName:        $firstName,
                 lastName:         $lastName,
                 username:         $username,
@@ -1588,7 +1687,11 @@ app.post('/api/admin/moderators', async (req, res) => {
             CREATE (u)-[:HAS_ROLE]->(r)
             RETURN u
         `, {
-            firstName, lastName, username, email,
+            id,
+            firstName,
+            lastName,
+            username,
+            email,
             hashedPassword,
             status
         });
@@ -1596,7 +1699,8 @@ app.post('/api/admin/moderators', async (req, res) => {
         res.json({ success: true });
 
     } catch (e) {
-        res.status(500).json({ success: false });
+        console.error("Add moderator error:", e);
+        res.status(500).json({ success: false, message: e.message });
     } finally {
         await session.close();
     }
@@ -1604,7 +1708,18 @@ app.post('/api/admin/moderators', async (req, res) => {
 
 app.put('/api/admin/moderators/:id', async (req, res) => {
     const { id } = req.params;
-    const { firstName, lastName, username, email, status, role } = req.body;
+    let { firstName, lastName, name, username, email, status, role } = req.body;
+
+    // Handle 'name' from frontend if firstName/lastName are missing
+    if (name && !firstName) {
+        const parts = name.trim().split(/\s+/);
+        firstName = parts[0];
+        lastName = parts.slice(1).join(' ');
+    }
+
+    firstName = firstName || 'Moderator';
+    lastName = lastName || '';
+    status = status || 'ACTIVE';
 
     const session = driver.session();
 
@@ -1703,6 +1818,8 @@ app.post('/api/admin/roles', async (req, res) => {
     `, { name, description });
 
     res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
   } finally {
     await session.close();
   }
@@ -1715,9 +1832,14 @@ app.delete('/api/admin/roles/:id', async (req, res) => {
   try {
     // Vérifier si des utilisateurs ont ce rôle
     const check = await session.run(`
-      MATCH (u:User)-[:HAS_ROLE]->(r:Role {id: $id})
+      MATCH (r:Role {id: $id})
+      OPTIONAL MATCH (u:User)-[:HAS_ROLE]->(r)
       RETURN count(u) as userCount, r.name as roleName
     `, { id });
+
+    if (check.records.length === 0) {
+      return res.status(404).json({ success: false, message: 'Role not found' });
+    }
 
     const userCount = check.records[0].get('userCount').toInt();
     const roleName  = check.records[0].get('roleName');
@@ -1770,15 +1892,187 @@ app.get('/api/admin/roles', async (req, res) => {
   try {
     const result = await session.run(`MATCH (r:Role) RETURN r`);
 
-    const roles = result.records.map(r => ({
-      id: r.get('r').identity.toString(),
-      ...r.get('r').properties
-    }));
+    const roles = result.records.map(r => {
+      const props = r.get('r').properties;
+      return {
+        id: props.id, // property id (UUID)
+        ...props
+      };
+    });
 
     res.json(roles);
   } finally {
     await session.close();
   }
+});
+
+// ==========================================
+// REPORTING SYSTEM (POSTS / COMMENTS)
+// ==========================================
+const { v4: uuidv4 } = require('uuid');
+
+app.post('/api/reports', async (req, res) => {
+  const { reporterId, targetId, targetType, reason } = req.body;
+  const session = driver.session();
+  try {
+    const timestamp = Date.now();
+    const reportId = uuidv4();
+    let query = '';
+
+    if (targetType === 'Post') {
+      query = `
+        MATCH (u:User {id: $reporterId})
+        MATCH (p:Post {id: $targetId})
+        CREATE (u)-[r:REPORTED { id: $reportId, reason: $reason, timestamp: $timestamp, status: 'pending' }]->(p)
+        RETURN r
+      `;
+    } else if (targetType === 'Comment') {
+      query = `
+        MATCH (u:User {id: $reporterId})
+        MATCH (c:Comment {id: $targetId})
+        CREATE (u)-[r:REPORTED { id: $reportId, reason: $reason, timestamp: $timestamp, status: 'pending' }]->(c)
+        RETURN r
+      `;
+    } else {
+      return res.status(400).json({ success: false, message: 'Invalid targetType' });
+    }
+
+    const result = await session.run(query, { reporterId, targetId, reason, timestamp, reportId });
+    if (result.records.length === 0) {
+        return res.status(404).json({ success: false, message: 'Target or Reporter not found' });
+    }
+    res.json({ success: true, message: 'Report submitted successfully' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  } finally {
+    await session.close();
+  }
+});
+
+app.get('/api/admin/reports', async (req, res) => {
+  const session = driver.session();
+  try {
+    const query = `
+      MATCH (u:User)-[r:REPORTED]->(target)
+      WHERE r.status = 'pending'
+      OPTIONAL MATCH (target)<-[:OWNS_POST|OWNS_COMMENT]-(author:User)
+      RETURN
+        r.id as id,
+        u.id as reporterId,
+        u.username as reporterName,
+        target.id as targetId,
+        labels(target)[0] as targetType,
+        target.content as targetContent,
+        author.id as authorId,
+        author.username as authorName,
+        r.reason as reason,
+        r.timestamp as timestamp
+      ORDER BY r.timestamp DESC
+    `;
+    const result = await session.run(query);
+    const reports = result.records.map(record => ({
+      id: record.get('id'),
+      reporterId: record.get('reporterId'),
+      reporterName: record.get('reporterName'),
+      targetId: record.get('targetId'),
+      targetType: record.get('targetType'),
+      targetContent: record.get('targetContent') || "",
+      authorId: record.get('authorId') || null,
+      authorName: record.get('authorName') || 'Unknown',
+      reason: record.get('reason') || 'No reason',
+      timestamp: record.get('timestamp') ? (typeof record.get('timestamp').toNumber === 'function' ? record.get('timestamp').toNumber() : record.get('timestamp')) : Date.now()
+    }));
+    res.json(reports);
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  } finally {
+    await session.close();
+  }
+});
+
+app.put('/api/admin/reports/:reportId/resolve', async (req, res) => {
+  const { reportId } = req.params;
+  const { action, adminId, customReason } = req.body; // 'dismiss' or 'delete'
+  const session = driver.session();
+  try {
+    if (action === 'delete') {
+      const findQuery = `
+        MATCH ()-[r:REPORTED {id: $reportId}]->(target)
+        OPTIONAL MATCH (target)<-[:OWNS_POST|OWNS_COMMENT]-(owner:User)
+        RETURN target.id as targetId, labels(target)[0] as type, owner.id as ownerId
+      `;
+      const findRes = await session.run(findQuery, { reportId });
+      
+      if (findRes.records.length > 0) {
+          const targetId = findRes.records[0].get('targetId');
+          const ownerId = findRes.records[0].get('ownerId');
+          const type = findRes.records[0].get('type');
+          
+          if (ownerId && adminId) {
+             const contentType = type === 'Post' ? "your post" : "your comment";
+             const defaultMessage = `The moderator has deleted ${contentType} because it does not respect the application's rules.`;
+             const notifText = customReason ? `${defaultMessage} Reason: ${customReason}` : defaultMessage;
+
+             await sendNotification(
+                 session, 
+                 'system_alert', 
+                 adminId, 
+                 ownerId, 
+                 type === 'Post' ? targetId : null, 
+                 type === 'Comment' ? targetId : null, 
+                 notifText
+             );
+          }
+          
+          await session.run(`MATCH (target) WHERE target.id = $targetId DETACH DELETE target`, { targetId });
+      }
+      res.json({ success: true, message: 'Report resolved and target deleted' });
+    } else {
+      const dismissQuery = `
+        MATCH ()-[r:REPORTED {id: $reportId}]->()
+        SET r.status = 'resolved'
+      `;
+      await session.run(dismissQuery, { reportId });
+      res.json({ success: true, message: 'Report dismissed' });
+    }
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  } finally {
+    await session.close();
+  }
+});
+
+app.post('/api/admin/reports/:reportId/analyze', async (req, res) => {
+    const { reportId } = req.params;
+    console.log(`[ADMIN] Analyzing report: ${reportId}`);
+    const session = driver.session();
+    try {
+        const findRes = await session.run(
+            `MATCH ()-[r:REPORTED {id: $reportId}]->(target)
+             RETURN target.id as id, target.content as content, labels(target)[0] as type`,
+            { reportId }
+        );
+
+        if (findRes.records.length === 0) {
+            console.warn(`[ADMIN] Report not found: ${reportId}`);
+            return res.status(404).json({ success: false, message: 'Target not found' });
+        }
+
+        const content = findRes.records[0].get('content');
+        if (!content || content.trim() === "") {
+            console.warn(`[ADMIN] No content for target in report: ${reportId}`);
+            return res.status(400).json({ success: false, message: 'No text content to analyze' });
+        }
+
+        console.log(`[ADMIN] Calling AI for content: "${content.substring(0, 50)}..."`);
+        const aiResult = await callAI('/analyze/full', { text: content });
+        res.json({ success: true, analysis: aiResult });
+    } catch(e) {
+        console.error(`[ADMIN] Analysis error for report ${reportId}:`, e.message);
+        res.status(500).json({ success: false, message: e.message });
+    } finally {
+        await session.close();
+    }
 });
 
 //global metrics
@@ -1790,7 +2084,7 @@ app.get('/api/admin/stats/posts-per-day', async (req, res) => {
     try {
         const result = await session.run(`
             MATCH (p:Post)
-            RETURN date(datetime({epochMillis: p.timestamp})) as day,
+            RETURN date(datetime({epochMillis: p.createdAt})) as day,
                    count(p) as count
             ORDER BY day
         `);

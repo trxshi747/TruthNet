@@ -137,6 +137,15 @@ class _LoginScreenState extends State<LoginScreen> {
                               case 'USER_NOT_FOUND':
                                 message = 'IDENTITY_NOT_FOUND.SYS';
                                 break;
+                              case 'ACCOUNT_DEACTIVATED':
+                                message = 'ACCOUNT_DEACTIVATED: Please contact support.';
+                                break;
+                              case 'ACCOUNT_BANNED':
+                                message = 'ACCOUNT_PERMANENTLY_BANNED';
+                                break;
+                              case 'ACCOUNT_SUSPENDED':
+                                message = response['detail'] ?? 'ACCOUNT_SUSPENDED';
+                                break;
                               default:
                                 message = 'LOGIN_FAILED: ${response['message'] ?? 'UNKNOWN_ERROR'}';
                             }
@@ -149,6 +158,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ),
                                 backgroundColor: AppTheme.coral,
                                 behavior: SnackBarBehavior.floating,
+                                duration: const Duration(seconds: 5),
                               ),
                             );
                           }

@@ -140,11 +140,9 @@ class ApiService {
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
       } else {
-        print("ApiService.followUser failed: ${response.statusCode} ${response.body}");
         return {'success': false, 'message': 'Server error'};
       }
     } catch (e) { 
-      print("ApiService.followUser exception: $e");
       return {'success': false, 'message': 'Network error'}; 
     }
   }
@@ -181,13 +179,6 @@ class ApiService {
   static Future<List<dynamic>> getArchivePosts(String userId) async {
     try {
       final response = await http.get(Uri.parse('$baseUrl/users/$userId/archive'));
-      return jsonDecode(response.body);
-    } catch (e) { return []; }
-  }
-
-  static Future<List<dynamic>> getSavedPosts(String userId) async {
-    try {
-      final response = await http.get(Uri.parse('$baseUrl/users/$userId/saved'));
       return jsonDecode(response.body);
     } catch (e) { return []; }
   }
@@ -397,45 +388,41 @@ class ApiService {
     } catch (e) { return []; }
   }
 
-  static Future<bool> addModerator(Map<String, dynamic> data) async {
+  static Future<Map<String, dynamic>> addModerator(Map<String, dynamic> data) async {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/admin/moderators'),
         body: jsonEncode(data),
         headers: {'Content-Type': 'application/json'},
       );
-
-      return jsonDecode(response.body)['success'] ?? false;
+      return jsonDecode(response.body);
     } catch (e) {
-      return false;
+      return {'success': false, 'message': 'CONNECTION_ERROR'};
     }
   }
 
-  static Future<bool> updateModerator(String id, Map<String, dynamic> data) async {
+  static Future<Map<String, dynamic>> updateModerator(String id, Map<String, dynamic> data) async {
     try {
       final response = await http.put(
         Uri.parse('$baseUrl/admin/moderators/$id'),
         body: jsonEncode(data),
         headers: {'Content-Type': 'application/json'},
       );
-
-      return jsonDecode(response.body)['success'] ?? false;
+      return jsonDecode(response.body);
     } catch (e) {
-      return false;
+      return {'success': false, 'message': 'CONNECTION_ERROR'};
     }
   }
 
-  static Future<bool> deleteModerator(String id) async {
+  static Future<Map<String, dynamic>> deleteModerator(String id) async {
     try {
       final response = await http.delete(
         Uri.parse('$baseUrl/admin/moderators/$id'),
         headers: {'Content-Type': 'application/json'},
       );
-
-      final data = jsonDecode(response.body);
-      return data['success'] ?? false;
+      return jsonDecode(response.body);
     } catch (e) {
-      return false;
+      return {'success': false, 'message': 'CONNECTION_ERROR'};
     }
   }
 
@@ -446,12 +433,9 @@ class ApiService {
       final response = await http.get(
         Uri.parse('$baseUrl/admin/roles'),
       );
-
       final data = jsonDecode(response.body);
       return data is List ? data : data['data'] ?? [];
-    } catch (e) {
-      return [];
-    }
+    } catch (e) { return []; }
   }
 
   static Future<bool> addRole(Map<String, dynamic> data) async {
@@ -461,15 +445,11 @@ class ApiService {
         body: jsonEncode(data),
         headers: {'Content-Type': 'application/json'},
       );
-
       final res = jsonDecode(response.body);
       return res['success'] ?? false;
-    } catch (e) {
-      return false;
-    }
+    } catch (e) { return false; }
   }
 
-  /*
   static Future<bool> updateRole(String id, Map<String, dynamic> data) async {
     try {
       final response = await http.put(
@@ -477,47 +457,10 @@ class ApiService {
         body: jsonEncode(data),
         headers: {'Content-Type': 'application/json'},
       );
-
       final res = jsonDecode(response.body);
       return res['success'] ?? false;
-    } catch (e) {
-      return false;
-    }
+    } catch (e) { return false; }
   }
-  */
-
-  // api_service.dart — déjà correct, mais vérifie que tu passes bien l'id
-  static Future<bool> updateRole(String id, Map<String, dynamic> data) async {
-    try {
-      final response = await http.put(
-        Uri.parse('$baseUrl/admin/roles/$id'),
-        body: jsonEncode(data),
-        headers: {'Content-Type': 'application/json'},
-      );
-      debugPrint('updateRole response: ${response.statusCode} ${response.body}');
-      final res = jsonDecode(response.body);
-      return res['success'] ?? false;
-    } catch (e) {
-      debugPrint('updateRole error: $e');
-      return false;
-    }
-  }
-
-  /*
-  static Future<bool> deleteRole(String id) async {
-    try {
-      final response = await http.delete(
-        Uri.parse('$baseUrl/admin/roles/$id'),
-        headers: {'Content-Type': 'application/json'},
-      );
-
-      final res = jsonDecode(response.body);
-      return res['success'] ?? false;
-    } catch (e) {
-      return false;
-    }
-  }
-  */
 
   static Future<Map<String, dynamic>> deleteRole(String id) async {
     try {
@@ -531,29 +474,25 @@ class ApiService {
     }
   }
 
-  // --- register admin
-
   static Future<bool> registerAdmin(Map<String, dynamic> data) async {
-    final res = await http.post(
-      Uri.parse('$baseUrl/auth/admin/register'),
-      body: jsonEncode(data),
-      headers: {'Content-Type': 'application/json'},
-    );
-
-    final body = jsonDecode(res.body);
-    return body['success'] ?? false;
+    try {
+      final res = await http.post(
+        Uri.parse('$baseUrl/auth/admin/register'),
+        body: jsonEncode(data),
+        headers: {'Content-Type': 'application/json'},
+      );
+      final body = jsonDecode(res.body);
+      return body['success'] ?? false;
+    } catch (e) { return false; }
   }
 
-  // --- Manage Users
-
-// api_service.dart - Ajoute ces méthodes
-
-// ============ SANCTION METHODS ============
+  // --- SANCTIONS ---
 
   static Future<bool> suspendUser({
     required String userId,
     required String reason,
-    required int durationDays,
+    int? durationDays,
+    String? endDate,
     required String adminId,
   }) async {
     try {
@@ -562,16 +501,14 @@ class ApiService {
         body: jsonEncode({
           'reason': reason,
           'durationDays': durationDays,
+          'endDate': endDate,
           'adminId': adminId,
         }),
         headers: {'Content-Type': 'application/json'},
       );
       return jsonDecode(response.body)['success'] ?? false;
-    } catch (e) {
-      return false;
-    }
+    } catch (e) { return false; }
   }
-
 
   static Future<bool> banUser({
     required String userId,
@@ -588,11 +525,8 @@ class ApiService {
         headers: {'Content-Type': 'application/json'},
       );
       return jsonDecode(response.body)['success'] ?? false;
-    } catch (e) {
-      return false;
-    }
+    } catch (e) { return false; }
   }
-
 
   static Future<bool> revokeSanction({
     required String sanctionId,
@@ -605,68 +539,97 @@ class ApiService {
         headers: {'Content-Type': 'application/json'},
       );
       return jsonDecode(response.body)['success'] ?? false;
-    } catch (e) {
-      return false;
-    }
+    } catch (e) { return false; }
   }
 
-  static Future<bool> activateUser(String userId) async {
+  static Future<bool> activateUser({required String userId, required String adminId}) async {
     try {
       final response = await http.put(
         Uri.parse('$baseUrl/admin/users/$userId/activate'),
+        body: jsonEncode({'adminId': adminId}),
         headers: {'Content-Type': 'application/json'},
       );
       return jsonDecode(response.body)['success'] ?? false;
-    } catch (e) {
-      return false;
-    }
+    } catch (e) { return false; }
   }
 
   static Future<List<dynamic>> getActiveSanctions() async {
     try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/admin/sanctions/active'),
-      );
+      final response = await http.get(Uri.parse('$baseUrl/admin/sanctions/active'));
       return jsonDecode(response.body);
-    } catch (e) {
-      return [];
-    }
+    } catch (e) { return []; }
   }
-
-// Mettez à jour getAllUsers pour inclure les statuts
-  /*
-  static Future<List<dynamic>> getAllUsers() async {
-    try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/admin/users'),
-      );
-      return jsonDecode(response.body);
-    } catch (e) {
-      return [];
-    }
-  }
-  */
 
   // --- NOTIFICATIONS ---
 
   static Future<List<dynamic>> getNotifications(String userId) async {
     try {
       final response = await http.get(Uri.parse('$baseUrl/notifications/$userId'));
-      if (response.statusCode == 200) {
-        return jsonDecode(response.body);
-      }
-      return [];
+      return jsonDecode(response.body);
     } catch (e) { return []; }
   }
 
   static Future<bool> markNotificationRead(String notifId) async {
     try {
       final response = await http.put(Uri.parse('$baseUrl/notifications/$notifId/read'));
-      if (response.statusCode == 200) {
-        return jsonDecode(response.body)['success'] ?? false;
-      }
-      return false;
+      return jsonDecode(response.body)['success'] ?? false;
     } catch (e) { return false; }
   }
 
+  // --- REPORTS ---
+
+  static Future<bool> reportItem({
+    required String reporterId,
+    required String targetId,
+    required String targetType,
+    required String reason,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/reports'),
+        body: jsonEncode({
+          'reporterId': reporterId,
+          'targetId': targetId,
+          'targetType': targetType,
+          'reason': reason,
+        }),
+        headers: {'Content-Type': 'application/json'},
+      );
+      return jsonDecode(response.body)['success'] ?? false;
+    } catch (e) { return false; }
+  }
+
+  static Future<List<dynamic>> getReports() async {
+    try {
+      final response = await http.get(Uri.parse('$baseUrl/admin/reports'));
+      return jsonDecode(response.body);
+    } catch (e) { return []; }
+  }
+
+  static Future<bool> resolveReport(String reportId, String action, String adminId, [String? customReason]) async {
+    try {
+      final response = await http.put(
+        Uri.parse('$baseUrl/admin/reports/$reportId/resolve'),
+        body: jsonEncode({
+          'action': action,
+          'adminId': adminId,
+          'customReason': customReason
+        }),
+        headers: {'Content-Type': 'application/json'},
+      );
+      return jsonDecode(response.body)['success'] ?? false;
+    } catch (e) { return false; }
+  }
+
+  static Future<Map<String, dynamic>> analyzeReportTargetFullResponse(String reportId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/admin/reports/$reportId/analyze'),
+        headers: {'Content-Type': 'application/json'},
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'success': false, 'message': 'CONNECTION_ERROR'};
+    }
+  }
 }
