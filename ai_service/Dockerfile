@@ -35,8 +35,8 @@ AutoTokenizer.from_pretrained('martin-ha/toxic-comment-model')
 AutoModelForSequenceClassification.from_pretrained('martin-ha/toxic-comment-model')
 
 print('Downloading topic classifier...')
-AutoTokenizer.from_pretrained('MoritzLaurer/mDeBERTa-v3-base-xnli')
-AutoModelForSequenceClassification.from_pretrained('MoritzLaurer/mDeBERTa-v3-base-xnli')
+AutoTokenizer.from_pretrained('facebook/bart-large-mnli')
+AutoModelForSequenceClassification.from_pretrained('facebook/bart-large-mnli')
 
 print('All models ready.')
 EOF

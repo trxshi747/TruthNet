@@ -102,21 +102,20 @@ async def analyze_full_endpoint(body: SingleTextRequest):
 
 @router.post("/topic")
 async def analyze_topic_endpoint(body: SingleTextRequest):
-"""
-Analyse the topic of a single text.
-"""
+    """
+    Analyse the topic of a single text.
+    """
+    try:
+        result = classify_topic(body.text)
 
-try:
-    result = classify_topic(body.text)
+        return {
+            "success": True,
+            "result": result,
+        }
 
-    return {
-        "success": True,
-        "result": result,
-    }
-
-except Exception as e:
-    logger.error(f"Topic analysis error: {e}")
-    raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        logger.error(f"Topic analysis error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/verify")

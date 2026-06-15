@@ -222,18 +222,22 @@ class _PostScreenState extends State<PostScreen> {
       );
 
       if (result['id'] != null) {
-        Navigator.pop(context, true);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('POST_BROADCAST_SUCCESSFUL', style: GoogleFonts.spaceMono(color: AppTheme.darkPurple, fontWeight: FontWeight.bold)),
-            backgroundColor: AppTheme.peach,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        // Post was successfully created. Show the verification result to the user.
+        if (result['truthVerdict'] != null) {
+            _showVerificationDialog({
+                'verdict': result['truthVerdict'],
+                'truth_score': result['truthScore'],
+                'detail': result['truthExplanation'],
+                'message': 'CONTENT_VERIFIED', // custom flag for success
+                'sources': result['truthSources']
+            }, isSuccess: true);
+        } else {
+            Navigator.pop(context, true);
+        }
       } else if (result['message'] == 'CONTENT_TOO_TOXIC') {
           _showToxicityAlert(result['detail'] ?? "Your content is too toxic to be published.");
       } else if (result['message'] == 'CONTENT_UNVERIFIED' || result['message'] == 'CONTENT_NONSENSE') {
-          _showRejectionAlert(result);
+          _showVerificationDialog(result, isSuccess: false);
       } else {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -246,7 +250,7 @@ class _PostScreenState extends State<PostScreen> {
     setState(() => _isLoading = false);
   }
 
-  void _showRejectionAlert(Map<String, dynamic> data) {
+  void _showVerificationDialog(Map<String, dynamic> data, {required bool isSuccess}) {
     final verdict = data['verdict'] ?? 'Unverified';
     final score = ((data['truth_score'] ?? 0.0) * 100).toDouble();
     final explanation = data['detail'] ?? 'No explanation provided.';
@@ -260,10 +264,17 @@ class _PostScreenState extends State<PostScreen> {
     } else if (verdict.toString().toLowerCase() == 'false') {
       verdictColor = Colors.redAccent;
       verdictIcon = Icons.cancel_rounded;
+    } else if (isSuccess && verdict.toString().toLowerCase() == 'verified') {
+      verdictColor = Colors.green;
+      verdictIcon = Icons.check_circle_rounded;
+    } else if (isSuccess) {
+      verdictColor = Colors.blue;
+      verdictIcon = Icons.info_outline_rounded;
     }
 
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (context) => AlertDialog(
         backgroundColor: AppTheme.darkPurple,
         shape: RoundedRectangleBorder(
@@ -304,11 +315,11 @@ class _PostScreenState extends State<PostScreen> {
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.block_flipped, size: 16, color: verdictColor),
+                    Icon(isSuccess ? Icons.check : Icons.block_flipped, size: 16, color: verdictColor),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        "THIS_POST_WILL_NOT_BE_PUBLISHED",
+                        isSuccess ? "POST_PUBLISHED_SUCCESSFULLY" : "THIS_POST_WILL_NOT_BE_PUBLISHED",
                         style: GoogleFonts.spaceMono(color: verdictColor, fontSize: 10, fontWeight: FontWeight.bold),
                       ),
                     ),
@@ -320,7 +331,12 @@ class _PostScreenState extends State<PostScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () {
+                Navigator.pop(context); // close dialog
+                if (isSuccess) {
+                    Navigator.pop(context, true); // return to feed
+                }
+            },
             child: Text("CLOSE", style: GoogleFonts.spaceMono(color: AppTheme.peach, fontWeight: FontWeight.bold)),
           ),
         ],

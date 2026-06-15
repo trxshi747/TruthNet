@@ -1,94 +1,108 @@
-from transformers import pipeline
-from functools import lru_cache
+"""
+Topic Classification Module — HuggingFace Zero-Shot
+Uses facebook/bart-large-mnli
+"""
+
 import logging
+from functools import lru_cache
+from transformers import pipeline
 
-logger = logging.getLogger(**name**)
+logger = logging.getLogger(__name__)
 
-_MODEL_ID = "MoritzLaurer/mDeBERTa-v3-base-mnli-xnli"
-
-TOPICS = [
-"politics",
-"sports",
-"technology",
-"science",
-"health",
-"business",
-"education",
-"entertainment",
-"gaming",
-"religion",
-]
+# ─── Model loading ────────────────────────────────────────────────────────────
 
 @lru_cache(maxsize=1)
 def _get_pipeline():
-    logger.info(f"Loading topic classifier: {_MODEL_ID}")
+    """
+    Loads the zero-shot classification pipeline from HuggingFace.
+    This is cached so it only runs once on startup.
+    """
+    logger.info("⚡ Loading topic classification model (zero-shot)...")
+    # Use the correct pipeline for this model type
+    return pipeline("zero-shot-classification", model="facebook/bart-large-mnli")
 
-    return pipeline(
-        "zero-shot-classification",
-        model=_MODEL_ID,
-        device="cpu",
-    )
+# ─── Classification logic ─────────────────────────────────────────────────────
+
+# Define the candidate labels for our topic universe
+CANDIDATE_LABELS = [
+    "Politics", "Technology", "Health", "Business", "Sports", 
+    "Entertainment", "Science", "World News", "Environment", "Education"
+]
 
 def classify_topic(text: str) -> dict:
-"""
-Returns:
-
-{
-    "topic": "technology",
-    "confidence": 0.95,
-    "top_predictions": [
-        {"topic": "...", "score": ...}
-    ]
-}
-"""
-
+    """
+    Classifies a text into one of the CANDIDATE_LABELS using a zero-shot model.
+    """
     if not text or not text.strip():
-        return {
-            "topic": "unknown",
-            "confidence": 0.0,
-            "top_predictions": [],
-        }
+        return {"label": "N/A", "score": 0.0}
 
-    clf = _get_pipeline()
-
-    result = clf(
-        text[:512],
-        candidate_labels=TOPICS,
-        multi_label=False,
-    )
+    classifier = _get_pipeline()
+    
+    # Zero-shot pipeline requires the text and the candidate labels
+    result = classifier(text, CANDIDATE_LABELS)
+    
+    # The output is a dict with sequence, labels, and scores.
+    # We return the top label and its score.
+    top_label = result['labels'][0]
+    top_score = result['scores'][0]
 
     return {
-        "topic": result["labels"][0],
-        "confidence": round(result["scores"][0], 4),
-        "top_predictions": [
-            {
-                "topic": label,
-                "score": round(score, 4),
-            }
-            for label, score in zip(
-                result["labels"][:3],
-                result["scores"][:3],
-            )
-        ],
+        "label": top_label,
+        "score": round(top_score, 4),
     }
 
 def analyze_batch(texts: list[str]) -> list[dict]:
-    return [classify_topic(t) for t in texts]
+    """
+    Classifies a batch of texts.
+    """
+    classifier = _get_pipeline()
+    
+    # The pipeline can handle a list of texts efficiently
+    results = classifier(texts, CANDIDATE_LABELS)
+    
+    # Ensure results is a list even for a single text input
+    if not isinstance(results, list):
+        results = [results]
+
+    return [
+        {
+            "label": res['labels'][0],
+            "score": round(res['scores'][0], 4)
+        } 
+        for res in results
+    ]
 
 def aggregate_topics(results: list[dict]) -> dict:
+    """
+    Aggregates topic analysis results from a batch.
+    """
     if not results:
-        return {
-        "total": 0,
-        "topic_counts": {},
-        }
+        return {}
 
-    counts = {}
+    topic_counts = {label: 0 for label in CANDIDATE_LABELS}
+    total = len(results)
 
-    for item in results:
-        topic = item["topic"]
-        counts[topic] = counts.get(topic, 0) + 1
+    for res in results:
+        label = res.get("label")
+        if label in topic_counts:
+            topic_counts[label] += 1
+            
+    # Also provide the distribution as a percentage
+    distribution = {
+        label: round((count / total) * 100, 2) 
+        for label, count in topic_counts.items()
+    }
 
     return {
-        "total": len(results),
-        "topic_counts": counts,
+        "topic_counts": topic_counts,
+        "distribution_percent": distribution
     }
+
+# Pre-warm the model on import
+try:
+    _get_pipeline()
+    logger.info("✅ Topic classification model ready.")
+except Exception as e:
+    logger.error(f"Failed to load topic classification model: {e}")
+    # This will prevent the app from starting if the model is broken, which is good.
+

@@ -54,40 +54,32 @@ async def verify_claim(text: str, image_url: str | None = None, is_video: bool =
     is_image_only = "[IMAGE_ONLY_POST]" in text or not text.strip()
     
     prompt = f"""
-    Analyze the following content for factual accuracy. You are a TruthNet Verification Agent.
-    
+    You are a verification agent for TruthNet, a news analysis platform. Your mission is to analyze the content below (text and/or media) using up-to-the-minute, internet-wide web searches to provide a factual accuracy assessment.
+
     CRITICAL MANDATE:
-    1. You are performing CROSS-MODAL VERIFICATION. 
-    2. If an image or video is attached, you MUST analyze it deeply.
-    3. If the image shows a real-world scene, an object (like a vehicle), a headline, or an event, the post is a "claim" (verifiable information).
-    4. Casual text like "new info!" or "look at this!" does NOT make the post "Social" if the image contains news or factual content.
-    5. You MUST NEVER classify a post with an informative image as "Social" or "Opinion".
+    1. REAL-TIME WEB SEARCH: You MUST use your most current web search capabilities to find reputable primary sources (news agencies, scientific journals, official sites) to verify the claim. Your knowledge must be as close to real-time as possible.
+    2. HOLISTIC ANALYSIS: Treat the text and media as a single unit. The media's content dictates the post's type if it contains a verifiable claim (e.g., a real-world scene, object, or event).
+    3. SOURCE CITATION: You MUST cite your primary sources.
 
     CONTENT TO ANALYZE:
-    TEXT: "{text if not is_image_only else 'No text provided, analyze the media content only.'}"
-    MEDIA: {"[Image/Video attached]" if image_url else "[No media attached]"}
-    
-    CLASSIFICATION CRITERIA:
-    1. "Verifiable Claim": ANY post with an image of a scene, object, or event, OR text making a statement about facts.
-    2. "Social/Opinion": ONLY if BOTH text and image are purely personal/emotional with NO factual or news-related content.
-    3. "Nonsense/Gibberish": Completely incoherent content.
+    - TEXT: "{text if not is_image_only else 'No text provided, analyze the media content only.'}"
+    - MEDIA: {"[Image/Video attached]" if image_url else "[No media attached]"}
 
-    SCORING LOGIC:
-    - Evaluate the factual integrity of the information presented in the image or text.
-    - If the image shows a specific event or object (like a military vehicle in a conflict zone), verify its authenticity and context.
-    - Informal text ("new info!") should result in a 0% informative weight, but the image's content must provide the final Truth Score.
-
-    You MUST provide a JSON response with:
-    1. "type": "claim" (unless purely social or nonsense).
-    2. "truth_score": float 0.0 to 1.0 (based on the facts found in text/image).
-    3. "verdict": One of ["Verified", "Partially True", "False", "Unverified", "Social", "Nonsense"].
-    4. "explanation": Use this EXACT segmented format:
-       TEXT ANALYSIS: [Describe the text and its lack of or presence of info]
-       MEDIA ANALYSIS: [Perform a deep analysis of the image/video content. What is seen? What does it imply? Is it verified news?]
-       COMBINED VERDICT: [Synthesize why the score was given based on both parts.]
-    5. "is_publishable": Boolean. False if "nonsense" or if "claim" has truth_score < 0.3.
+    You MUST return ONLY a valid JSON object with this exact structure:
+    {{
+      "summary": "A concise, one or two-sentence summary of the claim and your final verdict.",
+      "type": "claim",
+      "truth_score": 0.0,
+      "verdict": "Unverified",
+      "explanation": "Conclusion on how text and media correlate, supported by the sources.",
+      "sources": [
+        "https://www.source1.com",
+        "https://www.source2.com"
+      ],
+      "is_publishable": true
+    }}
     
-    Return ONLY valid JSON.
+    IMPORTANT: The "explanation" field MUST be a single string, NOT a nested object.
     """
 
     content_parts = [prompt]
@@ -136,15 +128,16 @@ async def verify_claim(text: str, image_url: str | None = None, is_video: bool =
         content_parts[0] += "\n\nCRITICAL WARNING: THE IMAGE FAILED TO LOAD. DO NOT RETURN 100% TRUTH SCORE OR 'SOCIAL'. Instead, classify as 'Unverified' and explain that the image content could not be accessed but is likely meant to be a news claim based on the context."
 
     try:
-        # List of models based on your 2026 environment's available models
+        # Use the exact model list provided by the user's environment
         models_to_try = [
-            'gemini-1.5-pro',
-            'gemini-pro-latest',
-            'gemini-2.5-pro',
-            'gemini-2.5-flash',
-            'gemini-1.5-flash',
-            'gemini-flash-latest',
-            'gemini-2.0-flash'
+            'models/gemini-3.1-pro-preview',
+            'models/gemini-3-pro-preview',
+            'models/gemini-2.5-pro',
+            'models/gemini-pro-latest',
+            'models/gemini-3.5-flash',
+            'models/gemini-3.1-flash-lite',
+            'models/gemini-2.5-flash',
+            'models/gemini-flash-latest',
         ]
         
         response = None
@@ -173,11 +166,41 @@ async def verify_claim(text: str, image_url: str | None = None, is_video: bool =
         if not response:
             raise last_err or Exception("All Gemini models failed or reached quota limits.")
         
-        # Simple cleanup of common LLM markdown output
-        raw_text = response.text.replace("```json", "").replace("```", "").strip()
-        
+        import re
         import json
-        result = json.loads(raw_text)
+        
+        try:
+            raw_text = response.text
+        except ValueError:
+            raise Exception("AI response blocked. The content may have triggered safety filters.")
+            
+        # Aggressively clean the response text to extract just the JSON
+        clean_text = raw_text.strip()
+        
+        # Remove markdown code blocks if present
+        if clean_text.startswith("```json"):
+            clean_text = clean_text[7:]
+        elif clean_text.startswith("```"):
+            clean_text = clean_text[3:]
+            
+        if clean_text.endswith("```"):
+            clean_text = clean_text[:-3]
+            
+        clean_text = clean_text.strip()
+        
+        # Find the first { and last } to isolate the JSON object
+        start_idx = clean_text.find('{')
+        end_idx = clean_text.rfind('}')
+        
+        if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+            clean_text = clean_text[start_idx:end_idx + 1]
+            
+        try:
+            result = json.loads(clean_text)
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON Parse Error: {e}. Raw AI response was: {raw_text}")
+            raise Exception("The AI returned a malformed response. Please try again.")
+            
         return {
             "success": True,
             **result
