@@ -2317,6 +2317,73 @@ app.get('/api/admin/stats/posts-per-day', async (req, res) => {
     }
 });
 
+// Truthness score summary for the admin dashboard.
+app.get('/api/admin/truthness-summary', async (req, res) => {
+    const session = driver.session();
+
+    const asNumber = (value) => {
+        if (value && typeof value.toNumber === 'function') return value.toNumber();
+        return Number(value || 0);
+    };
+
+    try {
+        const summaryResult = await session.run(`
+            MATCH (p:Post)
+            WHERE p.truthScore IS NOT NULL
+              AND (p.isDeleted IS NULL OR p.isDeleted = false)
+            WITH p, toFloat(p.truthScore) AS score
+            RETURN count(p) AS total,
+                   avg(score) AS averageScore,
+                   sum(CASE WHEN score >= 0.75 THEN 1 ELSE 0 END) AS reliable,
+                   sum(CASE WHEN score >= 0.40 AND score < 0.75 THEN 1 ELSE 0 END) AS uncertain,
+                   sum(CASE WHEN score < 0.40 THEN 1 ELSE 0 END) AS lowTrust
+        `);
+
+        const trendResult = await session.run(`
+            MATCH (p:Post)
+            WHERE p.truthScore IS NOT NULL
+              AND p.createdAt IS NOT NULL
+              AND (p.isDeleted IS NULL OR p.isDeleted = false)
+            WITH date(datetime({epochMillis: p.createdAt})) AS day,
+                 avg(toFloat(p.truthScore)) AS averageScore,
+                 count(p) AS count
+            ORDER BY day DESC
+            LIMIT 7
+            RETURN day, averageScore, count
+            ORDER BY day ASC
+        `);
+
+        const record = summaryResult.records[0];
+
+        res.json({
+            success: true,
+            total: asNumber(record.get('total')),
+            averageScore: asNumber(record.get('averageScore')),
+            distribution: {
+                reliable: asNumber(record.get('reliable')),
+                uncertain: asNumber(record.get('uncertain')),
+                lowTrust: asNumber(record.get('lowTrust')),
+            },
+            trend: trendResult.records.map((r) => ({
+                day: r.get('day').toString(),
+                averageScore: asNumber(r.get('averageScore')),
+                count: asNumber(r.get('count')),
+            })),
+        });
+    } catch (e) {
+        console.error('Admin truthness-summary error:', e.message);
+        res.status(500).json({
+            success: false,
+            total: 0,
+            averageScore: 0,
+            distribution: { reliable: 0, uncertain: 0, lowTrust: 0 },
+            trend: [],
+        });
+    } finally {
+        await session.close();
+    }
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // AJOUTER dans server.js — Bridge Node.js ↔ Python AI Service
 // Coller AVANT app.listen(3000, ...)

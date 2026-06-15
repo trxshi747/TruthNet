@@ -8,12 +8,17 @@ import logging
 import google.generativeai as genai
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(dotenv_path="ai_service/.env")
+
+# .env doit etre à la racine du projet
+# load_dotenv()
 
 logger = logging.getLogger(__name__)
 
 # Configure Gemini
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+print("Gemini API Key:", os.getenv("GEMINI_API_KEY"))
+
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
     # Using 'gemini-1.5-flash' is standard, but some environments prefer the long name

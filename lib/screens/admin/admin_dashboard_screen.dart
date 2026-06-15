@@ -4,7 +4,6 @@ import 'package:fl_chart/fl_chart.dart';
 
 import '../../services/dashboard_service.dart';
 import '../../widgets/dynamic_background.dart';
-import '../../core/theme/app_theme.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -14,11 +13,12 @@ class AdminDashboardScreen extends StatefulWidget {
 }
 
 class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
-  Map<String, dynamic> _metrics   = {};
-  DashboardSummary     _aiSummary = DashboardSummary.empty;
-  bool _loading    = true;
-  bool _aiOnline   = false;
-  bool _aiLoading  = true;
+  Map<String, dynamic> _metrics = {};
+  DashboardSummary _aiSummary = DashboardSummary.empty;
+  TruthnessSummary _truthness = TruthnessSummary.empty;
+  bool _loading = true;
+  bool _aiOnline = false;
+  bool _aiLoading = true;
 
   @override
   void initState() {
@@ -27,37 +27,39 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 
   Future<void> _load() async {
-    setState(() { _loading = true; _aiLoading = true; });
+    setState(() {
+      _loading = true;
+      _aiLoading = true;
+    });
 
     // Load platform metrics and AI status in parallel
     final results = await Future.wait([
       DashboardService.getMetrics(),
       DashboardService.isAIServiceAvailable(),
       DashboardService.getDashboardAISummary(limit: 200),
+      DashboardService.getTruthnessSummary(),
     ]);
 
     if (mounted) {
       setState(() {
-        _metrics   = results[0] as Map<String, dynamic>;
-        _aiOnline  = results[1] as bool;
+        _metrics = results[0] as Map<String, dynamic>;
+        _aiOnline = results[1] as bool;
         _aiSummary = results[2] as DashboardSummary;
-        _loading   = false;
+        _truthness = results[3] as TruthnessSummary;
+        _loading = false;
         _aiLoading = false;
       });
     }
   }
 
   // ── Design tokens ──────────────────────────────────────────────────────────
-  static const _bg      = Color(0xFF0E1117);
-  static const _card    = Color(0xFF161B25);
-  static const _border  = Color(0xFF252D3D);
+  static const _bg = Color(0xFF0E1117);
   static const _textPri = Color(0xFFF0F2F5);
   static const _textSec = Color(0xFF7B8499);
-  static const _green   = Color(0xFF2ECC71);
-  static const _red     = Color(0xFFEE2727);
-  static const _amber   = Color(0xFFFFCF26);
-  static const _blue    = Color(0xFF4D9FEC);
-  static const _cyan    = Color(0xFF26E5FF);
+  static const _green = Color(0xFF2ECC71);
+  static const _red = Color(0xFFEE2727);
+  static const _amber = Color(0xFFFFCF26);
+  static const _blue = Color(0xFF4D9FEC);
 
   @override
   Widget build(BuildContext context) {
@@ -86,7 +88,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             child: Row(
               children: [
                 Container(
-                  width: 7, height: 7,
+                  width: 7,
+                  height: 7,
                   decoration: BoxDecoration(
                     color: _aiOnline ? _green : _red,
                     shape: BoxShape.circle,
@@ -96,7 +99,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 Text(
                   _aiOnline ? 'AI online' : 'AI offline',
                   style: TextStyle(
-                    fontSize: 11, color: _aiOnline ? _green : _red,
+                    fontSize: 11,
+                    color: _aiOnline ? _green : _red,
                   ),
                 ),
               ],
@@ -118,7 +122,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-
                 // ── Section header ─────────────────────────────────────
                 _sectionTitle('Overview'),
                 _sectionSubtitle('Platform analytics & system health'),
@@ -128,6 +131,15 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 _KpiGrid(metrics: _metrics),
                 const SizedBox(height: 28),
 
+                _sectionTitle('Truthness Score'),
+                _sectionSubtitle(
+                  'Average fact-check score across verified posts',
+                ),
+                const SizedBox(height: 14),
+
+                _TruthnessCard(summary: _truthness),
+                const SizedBox(height: 28),
+
                 // ── AI Sentiment ────────────────────────────────────────
                 Row(
                   children: [
@@ -135,35 +147,39 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     const Spacer(),
                     if (_aiLoading)
                       const SizedBox(
-                        width: 14, height: 14,
+                        width: 14,
+                        height: 14,
                         child: CircularProgressIndicator(
-                            color: _blue, strokeWidth: 1.5),
+                          color: _blue,
+                          strokeWidth: 1.5,
+                        ),
                       )
                     else if (!_aiOnline)
                       const _AIOfflineBadge(),
                   ],
                 ),
                 _sectionSubtitle(
-                    'Analysed ${_aiSummary.totalComments} recent comments'),
+                  'Analysed ${_aiSummary.totalComments} recent comments',
+                ),
                 const SizedBox(height: 14),
 
                 _SentimentCard(
-                  stats:    _aiSummary.sentiment,
-                  loading:  _aiLoading,
-                  offline:  !_aiOnline,
+                  stats: _aiSummary.sentiment,
+                  loading: _aiLoading,
+                  offline: !_aiOnline,
                 ),
                 const SizedBox(height: 16),
 
                 // ── Negativity breakdown ────────────────────────────────
                 _BreakdownCard(
-                  title:      'Negativity Breakdown',
-                  subtitle:   'Distribution of negative comment intensity',
-                  breakdown:  _aiSummary.sentiment.negativityBreakdown,
+                  title: 'Negativity Breakdown',
+                  subtitle: 'Distribution of negative comment intensity',
+                  breakdown: _aiSummary.sentiment.negativityBreakdown,
                   colors: {
-                    'low':      _blue,
+                    'low': _blue,
                     'moderate': _amber,
-                    'high':     const Color(0xFFE87F3A),
-                    'extreme':  _red,
+                    'high': const Color(0xFFE87F3A),
+                    'extreme': _red,
                   },
                   loading: _aiLoading,
                 ),
@@ -172,12 +188,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 // ── Toxicity ────────────────────────────────────────────
                 _sectionTitle('Toxicity Analysis'),
                 _sectionSubtitle(
-                    '${(_aiSummary.toxicity.toxicRate * 100).toStringAsFixed(1)}% '
-                        'of comments flagged as toxic'),
+                  '${(_aiSummary.toxicity.toxicRate * 100).toStringAsFixed(1)}% '
+                  'of comments flagged as toxic',
+                ),
                 const SizedBox(height: 14),
 
                 _ToxicityCard(
-                  stats:   _aiSummary.toxicity,
+                  stats: _aiSummary.toxicity,
                   loading: _aiLoading,
                   offline: !_aiOnline,
                 ),
@@ -185,14 +202,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
                 // ── Toxicity degree breakdown ────────────────────────────
                 _BreakdownCard(
-                  title:     'Toxicity Degree Breakdown',
-                  subtitle:  'Severity distribution across flagged content',
+                  title: 'Toxicity Degree Breakdown',
+                  subtitle: 'Severity distribution across flagged content',
                   breakdown: _aiSummary.toxicity.degreeBreakdown,
                   colors: {
-                    'low':      _green,
+                    'low': _green,
                     'moderate': _amber,
-                    'high':     const Color(0xFFE87F3A),
-                    'extreme':  _red,
+                    'high': const Color(0xFFE87F3A),
+                    'extreme': _red,
                   },
                   loading: _aiLoading,
                 ),
@@ -202,7 +219,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 if (_aiSummary.topToxicCategories.isNotEmpty)
                   _TopCategoriesCard(
                     categories: _aiSummary.topToxicCategories,
-                    loading:    _aiLoading,
+                    loading: _aiLoading,
                   ),
 
                 const SizedBox(height: 32),
@@ -214,15 +231,15 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     );
   }
 
-  Widget _sectionTitle(String text) => Text(
-    text,
-    style: GoogleFonts.righteous(fontSize: 20, color: _textPri),
-  );
+  Widget _sectionTitle(String text) =>
+      Text(text, style: GoogleFonts.righteous(fontSize: 20, color: _textPri));
 
   Widget _sectionSubtitle(String text) => Padding(
     padding: const EdgeInsets.only(top: 3),
-    child: Text(text,
-        style: GoogleFonts.spaceMono(fontSize: 11, color: _textSec)),
+    child: Text(
+      text,
+      style: GoogleFonts.spaceMono(fontSize: 11, color: _textSec),
+    ),
   );
 }
 
@@ -232,15 +249,30 @@ class _KpiGrid extends StatelessWidget {
   final Map<String, dynamic> metrics;
   const _KpiGrid({required this.metrics});
 
-  static const _bg     = Color(0xFF161B25);
+  static const _bg = Color(0xFF161B25);
   static const _border = Color(0xFF252D3D);
 
   @override
   Widget build(BuildContext context) {
     final items = [
-      _KpiItem('Users',    '${metrics["users"]    ?? 0}', Icons.person_outline_rounded,    const Color(0xFF4D9FEC)),
-      _KpiItem('Posts',    '${metrics["posts"]    ?? 0}', Icons.article_outlined,           const Color(0xFF26E5FF)),
-      _KpiItem('Comments', '${metrics["comments"] ?? 0}', Icons.chat_bubble_outline_rounded,const Color(0xFFFFCF26)),
+      _KpiItem(
+        'Users',
+        '${metrics["users"] ?? 0}',
+        Icons.person_outline_rounded,
+        const Color(0xFF4D9FEC),
+      ),
+      _KpiItem(
+        'Posts',
+        '${metrics["posts"] ?? 0}',
+        Icons.article_outlined,
+        const Color(0xFF26E5FF),
+      ),
+      _KpiItem(
+        'Comments',
+        '${metrics["comments"] ?? 0}',
+        Icons.chat_bubble_outline_rounded,
+        const Color(0xFFFFCF26),
+      ),
     ];
 
     return Container(
@@ -251,9 +283,13 @@ class _KpiGrid extends StatelessWidget {
         border: Border.all(color: _border),
       ),
       child: Row(
-        children: items.map((item) => Expanded(
-          child: _KpiCell(item: item, isLast: item == items.last),
-        )).toList(),
+        children: items
+            .map(
+              (item) => Expanded(
+                child: _KpiCell(item: item, isLast: item == items.last),
+              ),
+            )
+            .toList(),
       ),
     );
   }
@@ -288,12 +324,16 @@ class _KpiCell extends StatelessWidget {
           Text(
             item.value,
             style: GoogleFonts.righteous(
-                fontSize: 24, color: const Color(0xFFF0F2F5), height: 1),
+              fontSize: 24,
+              color: const Color(0xFFF0F2F5),
+              height: 1,
+            ),
           ),
           const SizedBox(height: 4),
-          Text(item.label,
-              style: const TextStyle(
-                  fontSize: 11, color: Color(0xFF7B8499))),
+          Text(
+            item.label,
+            style: const TextStyle(fontSize: 11, color: Color(0xFF7B8499)),
+          ),
         ],
       ),
     );
@@ -301,6 +341,281 @@ class _KpiCell extends StatelessWidget {
 }
 
 // ─── Sentiment Card ───────────────────────────────────────────────────────────
+
+class _TruthnessCard extends StatelessWidget {
+  final TruthnessSummary summary;
+
+  const _TruthnessCard({required this.summary});
+
+  static const _green = Color(0xFF2ECC71);
+  static const _amber = Color(0xFFFFCF26);
+  static const _red = Color(0xFFEE2727);
+  static const _card = Color(0xFF161B25);
+  static const _border = Color(0xFF252D3D);
+  static const _textPri = Color(0xFFF0F2F5);
+  static const _textSec = Color(0xFF7B8499);
+
+  @override
+  Widget build(BuildContext context) {
+    final averagePct = (summary.averageScore * 100).clamp(0, 100);
+    final scoreColor = summary.averageScore >= 0.75
+        ? _green
+        : summary.averageScore >= 0.40
+        ? _amber
+        : _red;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _card,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: _border),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < 560;
+          final scorePanel = _buildScorePanel(averagePct, scoreColor);
+          final chartPanel = _buildTrendChart();
+
+          if (compact) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [scorePanel, const SizedBox(height: 18), chartPanel],
+            );
+          }
+
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(width: 230, child: scorePanel),
+              const SizedBox(width: 20),
+              Expanded(child: chartPanel),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildScorePanel(num averagePct, Color scoreColor) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(
+              '${averagePct.toStringAsFixed(0)}%',
+              style: GoogleFonts.righteous(
+                fontSize: 34,
+                color: scoreColor,
+                height: 1,
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Padding(
+              padding: EdgeInsets.only(bottom: 4),
+              child: Text(
+                'avg truth',
+                style: TextStyle(fontSize: 11, color: _textSec),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          '${summary.total} scored posts',
+          style: const TextStyle(fontSize: 12, color: _textSec),
+        ),
+        const SizedBox(height: 16),
+        _TruthDistributionStat(
+          label: 'Reliable',
+          count: summary.distribution['reliable'] ?? 0,
+          total: summary.total,
+          color: _green,
+        ),
+        const SizedBox(height: 10),
+        _TruthDistributionStat(
+          label: 'Uncertain',
+          count: summary.distribution['uncertain'] ?? 0,
+          total: summary.total,
+          color: _amber,
+        ),
+        const SizedBox(height: 10),
+        _TruthDistributionStat(
+          label: 'Low trust',
+          count: summary.distribution['lowTrust'] ?? 0,
+          total: summary.total,
+          color: _red,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTrendChart() {
+    if (summary.trend.isEmpty) {
+      return Container(
+        height: 150,
+        decoration: BoxDecoration(
+          color: _border.withValues(alpha: 0.22),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: const Center(
+          child: Text(
+            'No truthness data yet',
+            style: TextStyle(fontSize: 12, color: _textSec),
+          ),
+        ),
+      );
+    }
+
+    return SizedBox(
+      height: 170,
+      child: BarChart(
+        BarChartData(
+          alignment: BarChartAlignment.spaceAround,
+          maxY: 1,
+          minY: 0,
+          gridData: FlGridData(
+            drawVerticalLine: false,
+            horizontalInterval: 0.25,
+            getDrawingHorizontalLine: (_) =>
+                FlLine(color: _border.withValues(alpha: 0.65), strokeWidth: 1),
+          ),
+          borderData: FlBorderData(show: false),
+          titlesData: FlTitlesData(
+            topTitles: const AxisTitles(
+              sideTitles: SideTitles(showTitles: false),
+            ),
+            rightTitles: const AxisTitles(
+              sideTitles: SideTitles(showTitles: false),
+            ),
+            leftTitles: AxisTitles(
+              sideTitles: SideTitles(
+                showTitles: true,
+                reservedSize: 34,
+                interval: 0.5,
+                getTitlesWidget: (value, meta) => Text(
+                  '${(value * 100).toStringAsFixed(0)}%',
+                  style: const TextStyle(fontSize: 9, color: _textSec),
+                ),
+              ),
+            ),
+            bottomTitles: AxisTitles(
+              sideTitles: SideTitles(
+                showTitles: true,
+                reservedSize: 24,
+                getTitlesWidget: (value, meta) {
+                  final index = value.toInt();
+                  if (index < 0 || index >= summary.trend.length) {
+                    return const SizedBox.shrink();
+                  }
+                  final day = summary.trend[index].day;
+                  final label = day.length >= 10 ? day.substring(5) : day;
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(
+                      label,
+                      style: const TextStyle(fontSize: 9, color: _textSec),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+          barGroups: [
+            for (var i = 0; i < summary.trend.length; i++)
+              BarChartGroupData(
+                x: i,
+                barRods: [
+                  BarChartRodData(
+                    toY: summary.trend[i].averageScore.clamp(0, 1),
+                    width: 14,
+                    borderRadius: BorderRadius.circular(5),
+                    color: _barColor(summary.trend[i].averageScore),
+                    backDrawRodData: BackgroundBarChartRodData(
+                      show: true,
+                      toY: 1,
+                      color: _border.withValues(alpha: 0.45),
+                    ),
+                  ),
+                ],
+              ),
+          ],
+          barTouchData: BarTouchData(
+            touchTooltipData: BarTouchTooltipData(
+              getTooltipColor: (_) => const Color(0xFF0E1117),
+              getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                final point = summary.trend[group.x];
+                return BarTooltipItem(
+                  '${(point.averageScore * 100).toStringAsFixed(0)}% truth\n'
+                  '${point.count} posts',
+                  const TextStyle(color: _textPri, fontSize: 11),
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Color _barColor(double score) {
+    if (score >= 0.75) return _green;
+    if (score >= 0.40) return _amber;
+    return _red;
+  }
+}
+
+class _TruthDistributionStat extends StatelessWidget {
+  final String label;
+  final int count;
+  final int total;
+  final Color color;
+
+  const _TruthDistributionStat({
+    required this.label,
+    required this.count,
+    required this.total,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final pct = total == 0 ? 0.0 : count / total;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: color,
+              ),
+            ),
+            Text(
+              '$count (${(pct * 100).toStringAsFixed(0)}%)',
+              style: const TextStyle(fontSize: 11, color: Color(0xFF7B8499)),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        LinearProgressIndicator(
+          value: pct,
+          backgroundColor: color.withValues(alpha: 0.12),
+          valueColor: AlwaysStoppedAnimation(color),
+          minHeight: 5,
+          borderRadius: BorderRadius.circular(4),
+        ),
+      ],
+    );
+  }
+}
 
 class _SentimentCard extends StatelessWidget {
   final SentimentStats stats;
@@ -315,14 +630,14 @@ class _SentimentCard extends StatelessWidget {
 
   static const _green = Color(0xFF2ECC71);
   static const _amber = Color(0xFFFFCF26);
-  static const _red   = Color(0xFFEE2727);
-  static const _card  = Color(0xFF161B25);
-  static const _border= Color(0xFF252D3D);
+  static const _red = Color(0xFFEE2727);
+  static const _card = Color(0xFF161B25);
+  static const _border = Color(0xFF252D3D);
 
   @override
   Widget build(BuildContext context) {
     if (offline) return const _AIOfflineCard();
-    if (loading)  return const _LoadingCard(height: 220);
+    if (loading) return const _LoadingCard(height: 220);
 
     final total = stats.total == 0 ? 1 : stats.total;
 
@@ -337,7 +652,8 @@ class _SentimentCard extends StatelessWidget {
         children: [
           // ── Pie chart ─────────────────────────────────────────────
           SizedBox(
-            width: 160, height: 160,
+            width: 160,
+            height: 160,
             child: Stack(
               alignment: Alignment.center,
               children: [
@@ -380,13 +696,15 @@ class _SentimentCard extends StatelessWidget {
                     Text(
                       '${stats.total}',
                       style: GoogleFonts.righteous(
-                          fontSize: 22,
-                          color: const Color(0xFFF0F2F5),
-                          height: 1),
+                        fontSize: 22,
+                        color: const Color(0xFFF0F2F5),
+                        height: 1,
+                      ),
                     ),
-                    const Text('comments',
-                        style: TextStyle(
-                            fontSize: 10, color: Color(0xFF7B8499))),
+                    const Text(
+                      'comments',
+                      style: TextStyle(fontSize: 10, color: Color(0xFF7B8499)),
+                    ),
                   ],
                 ),
               ],
@@ -401,16 +719,18 @@ class _SentimentCard extends StatelessWidget {
               children: [
                 _SentimentLegend('Positive', stats.positive, total, _green),
                 const SizedBox(height: 10),
-                _SentimentLegend('Neutral',  stats.neutral,  total, _amber),
+                _SentimentLegend('Neutral', stats.neutral, total, _amber),
                 const SizedBox(height: 10),
                 _SentimentLegend('Negative', stats.negative, total, _red),
                 const SizedBox(height: 14),
                 // Avg score display
                 Text(
                   'Avg negative score: '
-                      '${(stats.avgScores['negative']! * 100).toStringAsFixed(0)}%',
+                  '${(stats.avgScores['negative']! * 100).toStringAsFixed(0)}%',
                   style: const TextStyle(
-                      fontSize: 11, color: Color(0xFF7B8499)),
+                    fontSize: 11,
+                    color: Color(0xFF7B8499),
+                  ),
                 ),
               ],
             ),
@@ -437,21 +757,36 @@ class _SentimentLegend extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Row(children: [
-              Container(width: 8, height: 8,
-                  decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
-              const SizedBox(width: 6),
-              Text(label,
-                  style: const TextStyle(fontSize: 12, color: Color(0xFFF0F2F5))),
-            ]),
-            Text('$count  (${(pct * 100).toStringAsFixed(0)}%)',
-                style: TextStyle(fontSize: 11, color: color)),
+            Row(
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: color,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFFF0F2F5),
+                  ),
+                ),
+              ],
+            ),
+            Text(
+              '$count  (${(pct * 100).toStringAsFixed(0)}%)',
+              style: TextStyle(fontSize: 11, color: color),
+            ),
           ],
         ),
         const SizedBox(height: 4),
         LinearProgressIndicator(
           value: pct,
-          backgroundColor: color.withOpacity(0.12),
+          backgroundColor: color.withValues(alpha: 0.12),
           valueColor: AlwaysStoppedAnimation(color),
           minHeight: 4,
           borderRadius: BorderRadius.circular(4),
@@ -474,18 +809,18 @@ class _ToxicityCard extends StatelessWidget {
     required this.offline,
   });
 
-  static const _red   = Color(0xFFEE2727);
+  static const _red = Color(0xFFEE2727);
   static const _green = Color(0xFF2ECC71);
-  static const _card  = Color(0xFF161B25);
-  static const _border= Color(0xFF252D3D);
+  static const _card = Color(0xFF161B25);
+  static const _border = Color(0xFF252D3D);
 
   @override
   Widget build(BuildContext context) {
     if (offline) return const _AIOfflineCard();
     if (loading) return const _LoadingCard(height: 140);
 
-    final toxicPct  = stats.total == 0 ? 0.0 : stats.toxicCount  / stats.total;
-    final cleanPct  = stats.total == 0 ? 1.0 : stats.cleanCount  / stats.total;
+    final toxicPct = stats.total == 0 ? 0.0 : stats.toxicCount / stats.total;
+    final cleanPct = stats.total == 0 ? 1.0 : stats.cleanCount / stats.total;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -493,9 +828,7 @@ class _ToxicityCard extends StatelessWidget {
         color: _card,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
-          color: stats.toxicRate > 0.3
-              ? _red.withOpacity(0.35)
-              : _border,
+          color: stats.toxicRate > 0.3 ? _red.withValues(alpha: 0.35) : _border,
         ),
       ),
       child: Column(
@@ -507,14 +840,14 @@ class _ToxicityCard extends StatelessWidget {
               _ToxicStat(
                 label: 'Toxic',
                 value: '${stats.toxicCount}',
-                pct:   toxicPct,
+                pct: toxicPct,
                 color: _red,
               ),
               const SizedBox(width: 12),
               _ToxicStat(
                 label: 'Clean',
                 value: '${stats.cleanCount}',
-                pct:   cleanPct,
+                pct: cleanPct,
                 color: _green,
               ),
               const Spacer(),
@@ -524,12 +857,15 @@ class _ToxicityCard extends StatelessWidget {
                   Text(
                     '${(stats.toxicRate * 100).toStringAsFixed(1)}%',
                     style: GoogleFonts.righteous(
-                        fontSize: 26,
-                        color: stats.toxicRate > 0.3 ? _red : _green,
-                        height: 1),
+                      fontSize: 26,
+                      color: stats.toxicRate > 0.3 ? _red : _green,
+                      height: 1,
+                    ),
                   ),
-                  const Text('toxic rate',
-                      style: TextStyle(fontSize: 10, color: Color(0xFF7B8499))),
+                  const Text(
+                    'toxic rate',
+                    style: TextStyle(fontSize: 10, color: Color(0xFF7B8499)),
+                  ),
                 ],
               ),
             ],
@@ -542,7 +878,7 @@ class _ToxicityCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(6),
             child: LinearProgressIndicator(
               value: toxicPct,
-              backgroundColor: _green.withOpacity(0.2),
+              backgroundColor: _green.withValues(alpha: 0.2),
               valueColor: AlwaysStoppedAnimation(_red),
               minHeight: 8,
             ),
@@ -555,26 +891,29 @@ class _ToxicityCard extends StatelessWidget {
             children: [
               Text(
                 'Avg toxic score: '
-                    '${(stats.avgToxicScore * 100).toStringAsFixed(0)}%',
+                '${(stats.avgToxicScore * 100).toStringAsFixed(0)}%',
                 style: const TextStyle(fontSize: 11, color: Color(0xFF7B8499)),
               ),
               const Spacer(),
               if (stats.severeFlagCount > 0)
                 Container(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 3),
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
                   decoration: BoxDecoration(
-                    color: _red.withOpacity(0.12),
+                    color: _red.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: _red.withOpacity(0.3)),
+                    border: Border.all(color: _red.withValues(alpha: 0.3)),
                   ),
                   child: Text(
                     '⚠ ${stats.severeFlagCount} severe flag'
-                        '${stats.severeFlagCount > 1 ? "s" : ""}',
+                    '${stats.severeFlagCount > 1 ? "s" : ""}',
                     style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: _red),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: _red,
+                    ),
                   ),
                 ),
             ],
@@ -601,9 +940,10 @@ class _ToxicStat extends StatelessWidget {
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      Text(value,
-          style: GoogleFonts.righteous(
-              fontSize: 20, color: color, height: 1)),
+      Text(
+        value,
+        style: GoogleFonts.righteous(fontSize: 20, color: color, height: 1),
+      ),
       Text(
         '$label  (${(pct * 100).toStringAsFixed(0)}%)',
         style: const TextStyle(fontSize: 11, color: Color(0xFF7B8499)),
@@ -644,19 +984,23 @@ class _BreakdownCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title,
-              style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFFF0F2F5))),
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFFF0F2F5),
+            ),
+          ),
           const SizedBox(height: 2),
-          Text(subtitle,
-              style: const TextStyle(
-                  fontSize: 11, color: Color(0xFF7B8499))),
+          Text(
+            subtitle,
+            style: const TextStyle(fontSize: 11, color: Color(0xFF7B8499)),
+          ),
           const SizedBox(height: 14),
           ...['low', 'moderate', 'high', 'extreme'].map((key) {
             final count = breakdown[key] ?? 0;
-            final pct   = total == 0 ? 0.0 : count / total;
+            final pct = total == 0 ? 0.0 : count / total;
             final color = colors[key] ?? const Color(0xFF7B8499);
             return Padding(
               padding: const EdgeInsets.only(bottom: 10),
@@ -669,21 +1013,24 @@ class _BreakdownCard extends StatelessWidget {
                       Text(
                         key[0].toUpperCase() + key.substring(1),
                         style: TextStyle(
-                            fontSize: 12,
-                            color: color,
-                            fontWeight: FontWeight.w600),
+                          fontSize: 12,
+                          color: color,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                       Text(
                         '$count  (${(pct * 100).toStringAsFixed(0)}%)',
                         style: const TextStyle(
-                            fontSize: 11, color: Color(0xFF7B8499)),
+                          fontSize: 11,
+                          color: Color(0xFF7B8499),
+                        ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 4),
                   LinearProgressIndicator(
                     value: pct,
-                    backgroundColor: color.withOpacity(0.1),
+                    backgroundColor: color.withValues(alpha: 0.1),
                     valueColor: AlwaysStoppedAnimation(color),
                     minHeight: 5,
                     borderRadius: BorderRadius.circular(4),
@@ -707,11 +1054,11 @@ class _TopCategoriesCard extends StatelessWidget {
   const _TopCategoriesCard({required this.categories, required this.loading});
 
   static const _categoryIcons = {
-    'toxic':         Icons.warning_amber_rounded,
-    'severe_toxic':  Icons.dangerous_rounded,
-    'obscene':       Icons.visibility_off_rounded,
-    'threat':        Icons.gavel_rounded,
-    'insult':        Icons.sentiment_very_dissatisfied_rounded,
+    'toxic': Icons.warning_amber_rounded,
+    'severe_toxic': Icons.dangerous_rounded,
+    'obscene': Icons.visibility_off_rounded,
+    'threat': Icons.gavel_rounded,
+    'insult': Icons.sentiment_very_dissatisfied_rounded,
     'identity_hate': Icons.diversity_3_rounded,
   };
 
@@ -729,11 +1076,14 @@ class _TopCategoriesCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Top Toxic Categories',
-              style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFFF0F2F5))),
+          const Text(
+            'Top Toxic Categories',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFFF0F2F5),
+            ),
+          ),
           const SizedBox(height: 12),
           Wrap(
             spacing: 8,
@@ -741,29 +1091,32 @@ class _TopCategoriesCard extends StatelessWidget {
             children: categories.map((cat) {
               final label = (cat['category'] as String).replaceAll('_', ' ');
               final count = cat['count'] as int;
-              final icon  = _categoryIcons[cat['category']]
-                  ?? Icons.flag_rounded;
+              final icon =
+                  _categoryIcons[cat['category']] ?? Icons.flag_rounded;
               return Container(
                 padding: const EdgeInsets.symmetric(
-                    horizontal: 10, vertical: 7),
+                  horizontal: 10,
+                  vertical: 7,
+                ),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFEE2727).withOpacity(0.08),
+                  color: const Color(0xFFEE2727).withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
-                      color: const Color(0xFFEE2727).withOpacity(0.2)),
+                    color: const Color(0xFFEE2727).withValues(alpha: 0.2),
+                  ),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(icon, size: 13,
-                        color: const Color(0xFFEE2727)),
+                    Icon(icon, size: 13, color: const Color(0xFFEE2727)),
                     const SizedBox(width: 5),
                     Text(
                       '$label · $count',
                       style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFFEE2727)),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFFEE2727),
+                      ),
                     ),
                   ],
                 ),
@@ -792,7 +1145,9 @@ class _LoadingCard extends StatelessWidget {
     ),
     child: const Center(
       child: CircularProgressIndicator(
-          color: Color(0xFF4D9FEC), strokeWidth: 2),
+        color: Color(0xFF4D9FEC),
+        strokeWidth: 2,
+      ),
     ),
   );
 }
@@ -802,21 +1157,20 @@ class _AIOfflineBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    padding:
-    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
     decoration: BoxDecoration(
-      color: const Color(0xFFEE2727).withOpacity(0.1),
+      color: const Color(0xFFEE2727).withValues(alpha: 0.1),
       borderRadius: BorderRadius.circular(6),
     ),
     child: const Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(Icons.wifi_off_rounded,
-            size: 11, color: Color(0xFFEE2727)),
+        Icon(Icons.wifi_off_rounded, size: 11, color: Color(0xFFEE2727)),
         SizedBox(width: 4),
-        Text('AI offline',
-            style: TextStyle(
-                fontSize: 10, color: Color(0xFFEE2727))),
+        Text(
+          'AI offline',
+          style: TextStyle(fontSize: 10, color: Color(0xFFEE2727)),
+        ),
       ],
     ),
   );
@@ -832,19 +1186,18 @@ class _AIOfflineCard extends StatelessWidget {
       color: const Color(0xFF161B25),
       borderRadius: BorderRadius.circular(18),
       border: Border.all(
-          color: const Color(0xFFEE2727).withOpacity(0.25)),
+        color: const Color(0xFFEE2727).withValues(alpha: 0.25),
+      ),
     ),
     child: const Row(
       children: [
-        Icon(Icons.power_off_rounded,
-            color: Color(0xFFEE2727), size: 20),
+        Icon(Icons.power_off_rounded, color: Color(0xFFEE2727), size: 20),
         SizedBox(width: 12),
         Expanded(
           child: Text(
             'AI service is offline. Start the Python server:\n'
-                'cd ai_service && python main.py',
-            style: TextStyle(
-                fontSize: 12, color: Color(0xFF7B8499)),
+            'cd ai_service && python main.py',
+            style: TextStyle(fontSize: 12, color: Color(0xFF7B8499)),
           ),
         ),
       ],
