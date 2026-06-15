@@ -10,6 +10,7 @@ import 'login_screen.dart';
 import 'admin/admin_dashboard_screen.dart';
 import 'admin/admin_moderator_screen.dart';
 import 'admin/admin_role_screen.dart';
+import 'admin/admin_settings_screen.dart';
 import 'admin/admin_users_screen.dart';
 
 class AdminScreen extends StatefulWidget {
@@ -35,7 +36,7 @@ class _AdminScreenState extends State<AdminScreen> {
     const AdminUsersScreen(),
     const AdminModeratorsScreen(),
     const AdminRoleScreen(),
-    const Center(child: Text("SETTINGS")),
+    const AdminSettingsScreen(),
   ];
 
   @override
@@ -155,11 +156,7 @@ class _AdminScreenState extends State<AdminScreen> {
           ),
 
           // ================= CONTENT =================
-          Expanded(
-            child: DynamicBackground(
-              child: pages[selectedIndex],
-            ),
-          ),
+          Expanded(child: DynamicBackground(child: pages[selectedIndex])),
         ],
       ),
     );
