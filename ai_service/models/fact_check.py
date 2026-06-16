@@ -7,7 +7,9 @@ import os
 import logging
 import google.generativeai as genai
 from dotenv import load_dotenv
+from pathlib import Path
 
+"""
 load_dotenv(dotenv_path="ai_service/.env")
 
 # .env doit etre à la racine du projet
@@ -26,6 +28,41 @@ if GEMINI_API_KEY:
     model = genai.GenerativeModel('gemini-1.5-flash')
 else:
     logger.warning("GEMINI_API_KEY not found in environment. Fact-checking will be disabled.")
+    model = None
+
+"""
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Resolve .env relative to THIS FILE, not the current working directory.
+# fact_checker.py lives at:  ai_service/models/fact_checker.py
+# .env lives at:             ai_service/.env
+# So we go up two levels (models/ → ai_service/) to find it.
+# This works no matter where the process is launched from
+# (root, ai_service/, models/, an IDE "run" button, Docker, etc).
+# ─────────────────────────────────────────────────────────────────────────────
+_ENV_PATH = Path(__file__).resolve().parent.parent / ".env"
+
+if _ENV_PATH.exists():
+    load_dotenv(dotenv_path=_ENV_PATH)
+else:
+    # Fallback: still try default behaviour (cwd-based) in case the file
+    # was intentionally placed elsewhere (e.g. project root in production)
+    load_dotenv()
+
+logger = logging.getLogger(__name__)
+
+# ── Configure Gemini ───────────────────────────────────────────────────────────
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+if GEMINI_API_KEY:
+    logger.info(f"Gemini API key loaded from {_ENV_PATH}")
+    genai.configure(api_key=GEMINI_API_KEY)
+    model = genai.GenerativeModel('gemini-1.5-flash')
+else:
+    logger.warning(
+        f"GEMINI_API_KEY not found. Looked for .env at: {_ENV_PATH} "
+        f"(exists={_ENV_PATH.exists()}). Fact-checking will be disabled."
+    )
     model = None
 
 async def verify_claim(text: str, image_url: str | None = None, is_video: bool = False) -> dict:
