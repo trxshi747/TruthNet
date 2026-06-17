@@ -101,9 +101,17 @@ const storage = multer.diskStorage({
 const upload = multer({ storage: storage });
 
 // NEO4J CONNECTION
+const n_uri = process.env.NEO4J_URI || 'bolt://localhost:7687';
+const n_user = process.env.NEO4J_USERNAME || process.env.NEO4J_USER || 'neo4j';
+const n_pass = process.env.NEO4J_PASSWORD || 'truthnet123';
+
+console.log('[Neo4j] Connecting to:', n_uri);
+console.log('[Neo4j] Username:', n_user);
+if (!process.env.NEO4J_PASSWORD) console.warn('[Neo4j] WARNING: Using default development password!');
+
 const driver = neo4j.driver(
-    'bolt://localhost:7687',
-    neo4j.auth.basic(process.env.NEO4J_USER, process.env.NEO4J_PASSWORD)
+    n_uri,
+    neo4j.auth.basic(n_user, n_pass)
 );
 
 app.get('/', (req, res) => res.send('TruthNet API Bridge: Active'));
