@@ -2712,8 +2712,9 @@ app.get('/api/ai/health', async (req, res) => {
 
 
 
-server.listen(3000, () => {
-    console.log('Backend listening on port 3000');
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, '0.0.0.0', () => {
+    console.log(`Backend listening on port ${PORT}`);
     
     // Run background task to analyze any missed/old comments 5 seconds after startup
     setTimeout(autoAnalyzeOldComments, 5000); 
