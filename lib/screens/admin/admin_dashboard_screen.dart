@@ -32,7 +32,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       _aiLoading = true;
     });
 
-    // Load platform metrics and AI status in parallel
+    // The backend now reads the global threshold directly from Neo4j
+    // We no longer need to pass the threshold from the frontend dashboard.
     final results = await Future.wait([
       DashboardService.getMetrics(),
       DashboardService.isAIServiceAvailable(),

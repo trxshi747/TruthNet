@@ -209,11 +209,9 @@ async def dashboard_summary(body: BatchTextRequest):
     try:
         s_results = sentiment_batch(body.texts)
         t_results = toxicity_batch(body.texts)
-        topic_results = topic_batch(body.texts)
 
         s_agg = aggregate_sentiment(s_results)
         t_agg = aggregate_toxicity(t_results)
-        topic_agg = aggregate_topics(topic_results)
 
         # Top toxicity categories (sorted by count desc)
         top_categories = sorted(
@@ -227,7 +225,6 @@ async def dashboard_summary(body: BatchTextRequest):
             "total":    len(body.texts),
             "sentiment": s_agg,
             "toxicity":  t_agg,
-            "topics": topic_agg,
 
             "top_toxic_categories": [
                 {"category": cat, "count": cnt}

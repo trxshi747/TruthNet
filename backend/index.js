@@ -418,13 +418,50 @@ app.post('/api/auth/admin/register', async (req, res) => {
     } finally { await session.close(); }
 });
 
+// --- SETTINGS (GLOBAL PLATFORM CONFIG) ---
+
+app.get('/api/admin/settings', async (req, res) => {
+    const session = driver.session();
+    try {
+        const result = await session.run(`
+            MERGE (s:Settings {id: 'global'})
+            ON CREATE SET s.truthThreshold = 0.40
+            RETURN s.truthThreshold AS truthThreshold
+        `);
+        res.json({ success: true, truthThreshold: result.records[0].get('truthThreshold') });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    } finally {
+        await session.close();
+    }
+});
+
+app.put('/api/admin/settings', async (req, res) => {
+    const { truthThreshold } = req.body;
+    const session = driver.session();
+    try {
+        await session.run(`
+            MERGE (s:Settings {id: 'global'})
+            SET s.truthThreshold = $truthThreshold
+        `, { truthThreshold });
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    } finally {
+        await session.close();
+    }
+});
+
 app.get('/api/feed', async (req, res) => {
     const userId = req.query.userId;
     const session = driver.session();
     try {
         const result = await session.run(
-            `MATCH (u:User)-[:OWNS_POST]->(p:Post)
+            `MATCH (s:Settings {id: 'global'})
+             WITH coalesce(s.truthThreshold, 0.40) AS threshold
+             MATCH (u:User)-[:OWNS_POST]->(p:Post)
              WHERE p.visibility = 'public' AND (p.isDeleted IS NULL OR p.isDeleted = false)
+               AND (p.truthScore IS NULL OR toFloat(p.truthScore) >= threshold)
              RETURN u.username as author, u.id as authorId, p as post,
                     COUNT { (p)<-[:HAS_REACTION]-() } as likeCount,
                     COUNT { (p)<-[:HAS_COMMENT]-() } as commentCount,
@@ -865,6 +902,21 @@ app.post('/api/posts', upload.array('media', 10), async (req, res) => {
         }
     }
 
+    const session = driver.session();
+
+    // Fetch global threshold
+    let globalThreshold = 0.40;
+    try {
+        const settingsRes = await session.run(`
+            MERGE (s:Settings {id: 'global'})
+            ON CREATE SET s.truthThreshold = 0.40
+            RETURN s.truthThreshold AS truthThreshold
+        `);
+        globalThreshold = settingsRes.records[0].get('truthThreshold');
+    } catch (e) {
+        console.warn("Could not fetch global settings, defaulting to 0.40");
+    }
+
     // --- NEW: Mandatory Fact-Check before publishing ---
     let factCheckData = null;
     try {
@@ -878,11 +930,13 @@ app.post('/api/posts', upload.array('media', 10), async (req, res) => {
         if (factCheckRes.success) {
             factCheckData = factCheckRes;
             
-            // Block based on AI 'is_publishable' decision
-            if (factCheckRes.is_publishable === false) {
-                const isNonsense = factCheckRes.type === 'nonsense';
-                console.warn(`[POST] Publication blocked: ${factCheckRes.type} detected.`);
-                
+            // Block based on dynamic global threshold
+            const isNonsense = factCheckRes.type === 'nonsense';
+            const score = factCheckRes.truth_score || 0;
+            
+            if (isNonsense || (factCheckRes.type === 'claim' && score < globalThreshold)) {
+                console.warn(`[POST] Publication blocked: score ${score} is below threshold ${globalThreshold}`);
+                await session.close();
                 return res.status(400).json({
                     success: false,
                     message: isNonsense ? "CONTENT_NONSENSE" : "CONTENT_UNVERIFIED",
@@ -896,7 +950,6 @@ app.post('/api/posts', upload.array('media', 10), async (req, res) => {
         console.warn("AI Fact-check failed (skipping to allow publication):", fcErr.message);
     }
 
-    const session = driver.session();
     try {
         const result = await session.run(
             `MATCH (u:User {id: $userId})
@@ -2328,15 +2381,17 @@ app.get('/api/admin/truthness-summary', async (req, res) => {
 
     try {
         const summaryResult = await session.run(`
+            OPTIONAL MATCH (s:Settings {id: 'global'})
+            WITH coalesce(s.truthThreshold, 0.40) AS threshold
             MATCH (p:Post)
             WHERE p.truthScore IS NOT NULL
               AND (p.isDeleted IS NULL OR p.isDeleted = false)
-            WITH p, toFloat(p.truthScore) AS score
+            WITH p, toFloat(p.truthScore) AS score, threshold
             RETURN count(p) AS total,
                    avg(score) AS averageScore,
                    sum(CASE WHEN score >= 0.75 THEN 1 ELSE 0 END) AS reliable,
-                   sum(CASE WHEN score >= 0.40 AND score < 0.75 THEN 1 ELSE 0 END) AS uncertain,
-                   sum(CASE WHEN score < 0.40 THEN 1 ELSE 0 END) AS lowTrust
+                   sum(CASE WHEN score >= threshold AND score < 0.75 THEN 1 ELSE 0 END) AS uncertain,
+                   sum(CASE WHEN score < threshold THEN 1 ELSE 0 END) AS lowTrust
         `);
 
         const trendResult = await session.run(`
@@ -2469,31 +2524,28 @@ app.post('/api/ai/verify', async (req, res) => {
 
 // ── GET /api/ai/dashboard-sentiment ───────────────────────────────────────────
 // Called by the admin dashboard to get platform-wide sentiment + toxicity stats
-// Fetches the last N comments from Neo4j, sends them to the AI service
+// Now uses pre-calculated AI flags from Neo4j for instant loading instead of re-analyzing
 app.get('/api/ai/dashboard-sentiment', async (req, res) => {
-    //const limit  = parseInt(req.query.limit) || 200;
-    const limit = Math.floor(
-      Number(req.query.limit || 200)
-    );
     const session = driver.session();
-
-    console.log(
-      'dashboard limit:',
-      limit,
-      typeof limit
-    );
-
     try {
-        // 1. Pull recent comment texts from Neo4j
         const result = await session.run(`
             MATCH (c:Comment)
-            WHERE c.content IS NOT NULL AND c.content <> ''
-            RETURN c.id AS id, c.content AS content
-            ORDER BY c.createdAt DESC
-            LIMIT 200
-        `, { limit });
+            WHERE c.ai_analyzed = true
+            WITH count(c) as total,
+                 sum(CASE WHEN c.ai_sentiment = 'positive' THEN 1 ELSE 0 END) as pos,
+                 sum(CASE WHEN c.ai_sentiment = 'neutral' THEN 1 ELSE 0 END) as neu,
+                 sum(CASE WHEN c.ai_sentiment = 'negative' THEN 1 ELSE 0 END) as neg,
+                 avg(c.ai_sentiment_score) as avgSentScore,
+                 sum(CASE WHEN c.ai_is_toxic = true THEN 1 ELSE 0 END) as toxicCount,
+                 avg(c.ai_toxic_score) as avgToxScore,
+                 sum(CASE WHEN c.ai_degree = 'extreme' THEN 1 ELSE 0 END) as extremeCount,
+                 sum(CASE WHEN c.ai_degree = 'high' THEN 1 ELSE 0 END) as highCount,
+                 sum(CASE WHEN c.ai_degree = 'moderate' THEN 1 ELSE 0 END) as modCount,
+                 sum(CASE WHEN c.ai_degree = 'low' THEN 1 ELSE 0 END) as lowCount
+            RETURN total, pos, neu, neg, avgSentScore, toxicCount, avgToxScore, extremeCount, highCount, modCount, lowCount
+        `);
 
-        if (result.records.length === 0) {
+        if (result.records.length === 0 || result.records[0].get('total').toInt() === 0) {
             return res.json({
                 success:  true,
                 total:    0,
@@ -2507,15 +2559,49 @@ app.get('/api/ai/dashboard-sentiment', async (req, res) => {
             });
         }
 
-        // 2. Send to Python AI service
-        const texts = result.records.map(r => r.get('content'));
-        const aiResult = await callAI('/analyze/dashboard-summary', { texts });
+        const r = result.records[0];
+        const total = r.get('total').toInt();
+        const toxicCount = r.get('toxicCount').toInt();
 
-        res.json(aiResult);
+        res.json({
+            success: true,
+            total: total,
+            sentiment: {
+                positive: r.get('pos').toInt(),
+                neutral: r.get('neu').toInt(),
+                negative: r.get('neg').toInt(),
+                total: total,
+                avg_scores: { positive: r.get('avgSentScore') || 0, neutral: 0, negative: 0 },
+                negativity_breakdown: { 
+                    low: r.get('lowCount').toInt(), 
+                    moderate: r.get('modCount').toInt(), 
+                    high: r.get('highCount').toInt(), 
+                    extreme: r.get('extremeCount').toInt() 
+                }
+            },
+            toxicity: {
+                total: total,
+                toxic_count: toxicCount,
+                clean_count: total - toxicCount,
+                toxic_rate: total > 0 ? toxicCount / total : 0,
+                avg_toxic_score: r.get('avgToxScore') || 0,
+                degree_breakdown: { 
+                    low: r.get('lowCount').toInt(), 
+                    moderate: r.get('modCount').toInt(), 
+                    high: r.get('highCount').toInt(), 
+                    extreme: r.get('extremeCount').toInt() 
+                },
+                severe_flag_count: r.get('extremeCount').toInt() + r.get('highCount').toInt(),
+                category_counts: { "toxic": toxicCount }
+            },
+            top_toxic_categories: [
+                { category: "toxic", count: toxicCount }
+            ]
+        });
 
     } catch (e) {
         console.error('AI dashboard-sentiment error:', e.message);
-        res.status(503).json({ success: false, message: 'AI service unavailable', error: e.message });
+        res.status(503).json({ success: false, message: 'Database error', error: e.message });
     } finally {
         await session.close();
     }
@@ -2598,10 +2684,10 @@ async function analyzeAndStoreComment(commentId, content) {
         });
 
         await session.close();
-        console.log(`✅ AI flags stored for comment ${commentId}`);
+        console.log(`[AI] Flags stored for comment ${commentId}`);
     } catch (e) {
         // Non-blocking: AI failure should not break comment creation
-        console.warn(`⚠️ AI analysis skipped for comment ${commentId}: ${e.message}`);
+        console.warn(`[AI] Analysis skipped for comment ${commentId}: ${e.message}`);
     }
 }
 
@@ -2618,4 +2704,60 @@ app.get('/api/ai/health', async (req, res) => {
 
 
 
-server.listen(3000, () => console.log('Backend listening on port 3000'));
+server.listen(3000, () => {
+    console.log('Backend listening on port 3000');
+    
+    // Run background task to analyze any missed/old comments 5 seconds after startup
+    setTimeout(autoAnalyzeOldComments, 5000); 
+});
+
+// ── Background Task: Analyze Missed Comments ──────────────────────────────────
+async function autoAnalyzeOldComments() {
+    const session = driver.session();
+    try {
+        const result = await session.run(`
+            MATCH (c:Comment)
+            WHERE c.ai_analyzed IS NULL OR c.ai_analyzed = false
+            RETURN c.id as id, c.content as content
+        `);
+
+        const comments = result.records.map(r => ({
+            id: r.get('id'),
+            text: r.get('content')
+        }));
+
+        if (comments.length === 0) {
+            console.log("[Background] All comments are already AI-analyzed.");
+            return;
+        }
+
+        console.log(`[Background] Found ${comments.length} unanalyzed comments. Sending to AI for batch analysis...`);
+        
+        const aiResponse = await callAI('/analyze/batch/comments', { comments });
+        if (!aiResponse.success) throw new Error("AI service returned success: false");
+
+        for (const item of aiResponse.per_comment) {
+            await session.run(`
+                MATCH (c:Comment {id: $id})
+                SET c.ai_sentiment        = $sentiment,
+                    c.ai_sentiment_score  = $sentimentScore,
+                    c.ai_toxic_score      = $toxicScore,
+                    c.ai_is_toxic         = $isToxic,
+                    c.ai_degree           = $degree,
+                    c.ai_analyzed         = true
+            `, {
+                id: item.id,
+                sentiment:      item.sentiment?.label ?? 'neutral',
+                sentimentScore: item.sentiment?.confidence ?? 0,
+                toxicScore:     item.toxicity?.toxic_score ?? 0,
+                isToxic:        item.toxicity?.is_toxic ?? false,
+                degree:         item.toxicity?.degree ?? 'low',
+            });
+        }
+        console.log(`[Background] Successfully analyzed and updated ${comments.length} old comments.`);
+    } catch (e) {
+        console.warn(`[Background] Auto-analysis skipped or failed: ${e.message}`);
+    } finally {
+        await session.close();
+    }
+}

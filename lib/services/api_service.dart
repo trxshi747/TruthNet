@@ -6,7 +6,10 @@ import 'package:image_picker/image_picker.dart';
 class ApiService {
   static String get baseUrl {
     if (kIsWeb) return 'http://localhost:3000/api';
-    return 'http://10.0.2.2:3000/api';
+    if (!kIsWeb && (defaultTargetPlatform == TargetPlatform.android)) {
+      return 'http://10.0.2.2:3000/api';
+    }
+    return 'http://localhost:3000/api';
   }
 
   static Future<Map<String, dynamic>> login(String email, String password) async {

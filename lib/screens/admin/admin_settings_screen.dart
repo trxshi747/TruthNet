@@ -5,6 +5,8 @@ import 'package:model2/providers/auth_provider.dart';
 import 'package:model2/services/api_service.dart';
 import 'package:model2/services/dashboard_service.dart';
 import 'package:provider/provider.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 
 class AdminSettingsScreen extends StatefulWidget {
   const AdminSettingsScreen({super.key});
@@ -34,6 +36,38 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
   void initState() {
     super.initState();
     _refreshHealth();
+    _loadThreshold();
+  }
+
+  Future<void> _loadThreshold() async {
+    try {
+      final res = await http.get(Uri.parse('${ApiService.baseUrl}/admin/settings'));
+      if (res.statusCode == 200) {
+        final json = jsonDecode(res.body);
+        if (mounted && json['truthThreshold'] != null) {
+          setState(() {
+            _truthWarningThreshold = (json['truthThreshold'] as num).toDouble();
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Failed to load global threshold: $e');
+    }
+  }
+
+  Future<void> _saveThreshold(double value) async {
+    setState(() => _truthWarningThreshold = value);
+    
+    // Update global setting in backend to affect all users (feed masking, post rejection)
+    try {
+      await http.put(
+        Uri.parse('${ApiService.baseUrl}/admin/settings'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'truthThreshold': value}),
+      );
+    } catch (e) {
+      debugPrint('Failed to update global threshold: $e');
+    }
   }
 
   Future<void> _refreshHealth() async {
@@ -368,6 +402,9 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
                         inactiveColor: Colors.white24,
                         onChanged: (value) {
                           setState(() => _truthWarningThreshold = value);
+                        },
+                        onChangeEnd: (value) {
+                          _saveThreshold(value);
                         },
                       ),
                     ],
