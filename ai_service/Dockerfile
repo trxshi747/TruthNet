@@ -22,6 +22,9 @@ RUN pip install --upgrade pip && \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+COPY requirements-test.txt .
+RUN pip install --no-cache-dir -r requirements-test.txt
+
 # ── Step 3: bake HuggingFace models into the image ───────────────────────────
 RUN python - <<EOF
 from transformers import AutoTokenizer, AutoModelForSequenceClassification

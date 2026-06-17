@@ -31,3 +31,13 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
+  ai_service_test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: truthnet_ai_test
+    env_file:
+      - .env
+    command: pytest -v
+    depends_on:
+      - ai_service
