@@ -147,8 +147,7 @@ async def verify_claim(text: str, image_url: str | None = None, is_video: bool =
             try:
                 target_model = model_name if model_name.startswith('models/') else f"models/{model_name}"
                 temp_model = genai.GenerativeModel(
-                    model_name=target_model,
-                    tools=[{"google_search_retrieval": {}}]
+                    model_name=target_model
                 )
                 
                 # generate_content accepts a list of parts for multimodal
