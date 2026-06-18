@@ -59,7 +59,7 @@ app.add_middleware(
 )
 
 # ─── Routers ──────────────────────────────────────────────────────────────────
-app.include_router(analyze_router, prefix="/analyze")
+app.include_router(analyze_router)
 
 
 # ─── Health check ─────────────────────────────────────────────────────────────

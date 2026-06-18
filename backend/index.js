@@ -2463,6 +2463,9 @@ async function callAI(path, body) {
     const fullUrl = `${baseUrl}${safePath}`;
     
     console.log(`[Node] Calling AI Service at: ${fullUrl}`);
+    if (!HF_TOKEN) {
+        console.warn(`[Node] WARNING: HF_TOKEN is empty! Access to private Hugging Face spaces will return 404 or 401.`);
+    }
     
     const headers = { 'Content-Type': 'application/json' };
     if (HF_TOKEN) {
