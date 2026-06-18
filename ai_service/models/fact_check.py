@@ -53,13 +53,17 @@ async def verify_claim(text: str, image_url: str | None = None, is_video: bool =
     # If media is provided but text is empty, we handle the [IMAGE_ONLY_POST] placeholder
     is_image_only = "[IMAGE_ONLY_POST]" in text or not text.strip()
     
+    from datetime import datetime
+    current_date = datetime.now().strftime("%A, %B %d, %Y")
+    
     prompt = f"""
-    You are a verification agent for TruthNet, a news analysis platform. Your mission is to analyze the content below (text and/or media) using up-to-the-minute, internet-wide web searches to provide a factual accuracy assessment.
+    You are a verification agent for TruthNet, a news analysis platform.
+    CRITICAL CONTEXT: Today's date is {current_date}. You must evaluate all claims relative to this current date.
 
     CRITICAL MANDATE:
-    1. REAL-TIME WEB SEARCH: You MUST use your most current web search capabilities to find reputable primary sources (news agencies, scientific journals, official sites) to verify the claim. Your knowledge must be as close to real-time as possible.
-    2. HOLISTIC ANALYSIS: Treat the text and media as a single unit. The media's content dictates the post's type if it contains a verifiable claim (e.g., a real-world scene, object, or event).
-    3. SOURCE CITATION: You MUST cite your primary sources.
+    1. REAL-TIME AWARENESS: You must answer as if you are living on {current_date}. If a claim refers to recent events, treat it as breaking news for {current_date}.
+    2. HOLISTIC ANALYSIS: Treat the text and media as a single unit. The media's content dictates the post's type if it contains a verifiable claim.
+    3. SOURCE CITATION: Cite primary sources if you can verify the event.
 
     CONTENT TO ANALYZE:
     - TEXT: "{text if not is_image_only else 'No text provided, analyze the media content only.'}"
