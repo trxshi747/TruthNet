@@ -2453,6 +2453,7 @@ app.get('/api/admin/truthness-summary', async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000';
+const HF_TOKEN = process.env.HF_TOKEN || '';
 
 // ── Helper: call the Python AI service ────────────────────────────────────────
 async function callAI(path, body) {
@@ -2463,9 +2464,14 @@ async function callAI(path, body) {
     
     console.log(`[Node] Calling AI Service at: ${fullUrl}`);
     
+    const headers = { 'Content-Type': 'application/json' };
+    if (HF_TOKEN) {
+        headers['Authorization'] = `Bearer ${HF_TOKEN}`;
+    }
+    
     const res = await fetch(fullUrl, {
         method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: headers,
         body:    JSON.stringify(body),
     });
     if (!res.ok) throw new Error(`AI service error: ${res.status}`);
