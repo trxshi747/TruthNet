@@ -2456,7 +2456,14 @@ const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000';
 
 // ── Helper: call the Python AI service ────────────────────────────────────────
 async function callAI(path, body) {
-    const res = await fetch(`${AI_SERVICE_URL}${path}`, {
+    // Ensure no double slashes between URL and path
+    const baseUrl = AI_SERVICE_URL.endsWith('/') ? AI_SERVICE_URL.slice(0, -1) : AI_SERVICE_URL;
+    const safePath = path.startsWith('/') ? path : '/' + path;
+    const fullUrl = `${baseUrl}${safePath}`;
+    
+    console.log(`[Node] Calling AI Service at: ${fullUrl}`);
+    
+    const res = await fetch(fullUrl, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify(body),
