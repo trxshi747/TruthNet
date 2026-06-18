@@ -930,9 +930,14 @@ app.post('/api/posts', upload.array('media', 10), async (req, res) => {
     try {
         console.log(`[POST] Running mandatory fact-check for user ${userId}...`);
         
-        // Ensure the AI gets the absolute URL so Hugging Face can download it from Render
-        const hostUrl = req.protocol + '://' + req.get('host');
+        // Ensure the AI gets the absolute HTTPS URL so Hugging Face can download it without redirects
+        const hostName = req.get('host');
+        const isRender = hostName.includes('onrender.com');
+        const protocol = isRender ? 'https' : req.protocol;
+        const hostUrl = protocol + '://' + hostName;
         const absoluteImageUrl = primaryMediaUrl ? `${hostUrl}${primaryMediaUrl}` : null;
+        
+        console.log(`[POST] Absolute Image URL for AI: ${absoluteImageUrl}`);
         
         const factCheckRes = await callAI('/analyze/verify', { 
             text: content || "[IMAGE_ONLY_POST]", 
