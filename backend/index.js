@@ -1316,7 +1316,7 @@ app.post('/api/comments/:commentId/reply', async (req, res) => {
         const result = await session.run(
             `MATCH (u:User {id: $userId})
              MATCH (target:Comment {id: $commentId})<-[:OWNS_COMMENT]-(owner:User)
-             MATCH (target)-[:TARGETS*1..]->(p:Post)
+             MATCH (target)-[:TARGETS]->(p:Post)
              CREATE (reply:Comment {
                 id: randomUUID(), 
                 content: $content, 
