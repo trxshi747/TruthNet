@@ -929,9 +929,14 @@ app.post('/api/posts', upload.array('media', 10), async (req, res) => {
     let factCheckData = null;
     try {
         console.log(`[POST] Running mandatory fact-check for user ${userId}...`);
+        
+        // Ensure the AI gets the absolute URL so Hugging Face can download it from Render
+        const hostUrl = req.protocol + '://' + req.get('host');
+        const absoluteImageUrl = primaryMediaUrl ? `${hostUrl}${primaryMediaUrl}` : null;
+        
         const factCheckRes = await callAI('/analyze/verify', { 
             text: content || "[IMAGE_ONLY_POST]", 
-            image_url: primaryMediaUrl, 
+            image_url: absoluteImageUrl, 
             is_video: isVideo 
         });
 
