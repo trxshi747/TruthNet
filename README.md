@@ -5,15 +5,15 @@
 **A full-stack, graph-powered social network built with Flutter, Node.js, Neo4j Graph Database, and a Python FastAPI AI microservice for automated fact-checking, sentiment analysis, and truthness scoring.**
 
 [![Repository](https://img.shields.io/badge/GitHub-trxshi747%2FTruthNet-181717?style=for-the-badge&logo=github)](https://github.com/trxshi747/TruthNet)
-[![Flutter](https://img.shields.io/badge/Flutter-3.x-02569B?style=for-the-badge&logo=flutter&logoColor=white)](https://flutter.dev/)
-[![Dart](https://img.shields.io/badge/Dart-3.x-00B4AB?style=for-the-badge&logo=dart&logoColor=white)](https://dart.dev/)
-[![Node.js](https://img.shields.io/badge/Node.js-20+-339933?style=for-the-badge&logo=nodedotjs&logoColor=white)](https://nodejs.org/)
-[![Express](https://img.shields.io/badge/Express-4.x-68A063?style=for-the-badge&logo=express&logoColor=white)](https://expressjs.com/)
-[![Neo4j](https://img.shields.io/badge/Neo4j-Graph_DB-008CC1?style=for-the-badge&logo=neo4j&logoColor=white)](https://neo4j.com/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.111-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
-[![Google Gemini](https://img.shields.io/badge/Google_Gemini-API-8E44AD?style=for-the-badge&logo=googlegemini&logoColor=white)](https://ai.google.dev/)
-[![Socket.io](https://img.shields.io/badge/Socket.io-Real--Time-010101?style=for-the-badge&logo=socketdotio&logoColor=white)](https://socket.io/)
-[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
+[![Flutter](https://img.shields.io/badge/Flutter_3.x-02569B?style=for-the-badge&logo=flutter&logoColor=white)](https://flutter.dev/)
+[![Dart](https://img.shields.io/badge/Dart_3.x-00B4AB?style=for-the-badge&logo=dart&logoColor=white)](https://dart.dev/)
+[![Node.js](https://img.shields.io/badge/Node.js_20+-339933?style=for-the-badge&logo=nodedotjs&logoColor=white)](https://nodejs.org/)
+[![Express](https://img.shields.io/badge/Express_4.x-68A063?style=for-the-badge&logo=express&logoColor=white)](https://expressjs.com/)
+[![Neo4j](https://img.shields.io/badge/Neo4j_Graph_DB-008CC1?style=for-the-badge&logo=neo4j&logoColor=white)](https://neo4j.com/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![Google Gemini](https://img.shields.io/badge/Google_Gemini-8E44AD?style=for-the-badge&logo=googlegemini&logoColor=white)](https://ai.google.dev/)
+[![Socket.io](https://img.shields.io/badge/Socket.io-010101?style=for-the-badge&logo=socketdotio&logoColor=white)](https://socket.io/)
+[![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
 
 <br />
 
@@ -314,4 +314,5 @@ TruthNet/
 Developed by:
 * **[trxshi747 (Yassir Karrouti)](https://github.com/trxshi747)**
 * **[Ayataaki (Aya Taki)](https://github.com/Ayataaki)**
+
 
