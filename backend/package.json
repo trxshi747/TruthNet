@@ -1,4 +1,4 @@
-{
+﻿{
   "name": "truthnet-backend",
   "version": "1.0.0",
   "description": "Neo4j Bridge for TruthNet",
@@ -7,7 +7,7 @@
     "start": "node index.js",
     "dev": "nodemon index.js",
     "init:admin": "node initAdmin.js",
-    "dev:init": "npm run init:admin && nodemon server.js"
+    "dev:init": "npm run init:admin && nodemon index.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
