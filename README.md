@@ -158,7 +158,7 @@ The AI subsystem operates as an asynchronous microservice built on **FastAPI**:
 
 | System Architecture & Classes | Use Case Flows | Mobile Interface |
 | :---: | :---: | :---: |
-| <img src="docs/diagrams/class_diagram.jpeg" width="300" alt="Class Diagram" /> | <img src="docs/diagrams/use_case_diagram.png" width="300" alt="Use Cases" /> | <img src="docs/screenshots/app_overview.jpg" width="220" alt="Mobile App Overview" /> |
+| <img src="docs/diagrams/class_diagram.jpeg" width="300" alt="Class Diagram" /> | <img src="docs/diagrams/use_case_diagram.png" width="300" alt="Use Cases" /> | <img src="docs/screenshots/app_login.png" width="220" alt="TruthNet Login Screen" /> |
 
 </div>
 
