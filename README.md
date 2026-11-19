@@ -49,6 +49,10 @@ The client is crafted with **Flutter**, featuring custom **Neumorphic (Clay)** a
 
 <!-- Drag and drop the demo video (.mp4) here while editing this file on GitHub: it is uploaded and a link is inserted that renders as an inline player. -->
 
+
+https://github.com/user-attachments/assets/d82bcfb3-722b-4d74-bc55-5c009c1e3a90
+
+
 ---
 
 ## Key Features
