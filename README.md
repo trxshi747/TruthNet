@@ -19,12 +19,13 @@
 
 <p align="center">
   <a href="#overview">Overview</a> |
+  <a href="#video-demonstration">Video Demo</a> |
   <a href="#key-features">Key Features</a> |
   <a href="#system-architecture">Architecture</a> |
   <a href="#graph-database-model-neo4j">Graph Model</a> |
   <a href="#ai--truthness-engine">AI Engine</a> |
   <a href="#tech-stack">Tech Stack</a> |
-  <a href="#visuals-and-diagrams">Visuals</a> |
+  <a href="#diagrams">Diagrams</a> |
   <a href="#quick-start">Quick Start</a> |
   <a href="#api-reference">API Reference</a> |
   <a href="#repository-structure">Structure</a>
@@ -41,6 +42,12 @@
 By coupling a **Neo4j Graph Database** with an asynchronous **Python NLP microservice (FastAPI + Google Gemini + HuggingFace Transformers)**, the platform models social interactions as deeply connected graph entities while evaluating content against contextual truthfulness metrics.
 
 The client is crafted with **Flutter**, featuring custom **Neumorphic (Clay)** and **Glassmorphic** UI components, robust state management via **Riverpod & Freezed**, and live interactions powered by **Socket.io**.
+
+---
+
+## Video Demonstration
+
+<!-- Drag and drop the demo video (.mp4) here while editing this file on GitHub: it is uploaded and a link is inserted that renders as an inline player. -->
 
 ---
 
@@ -152,13 +159,13 @@ The AI subsystem operates as an asynchronous microservice built on **FastAPI**:
 
 ---
 
-## Visuals and Diagrams
+## Diagrams
 
 <div align="center">
 
-| System Architecture & Classes | Use Case Flows | Mobile Interface |
-| :---: | :---: | :---: |
-| <img src="docs/diagrams/class_diagram.jpeg" width="300" alt="Class Diagram" /> | <img src="docs/diagrams/use_case_diagram.png" width="300" alt="Use Cases" /> | <img src="docs/screenshots/app_login.png" width="220" alt="TruthNet Login Screen" /> |
+| System Architecture & Classes | Use Case Flows |
+| :---: | :---: |
+| <img src="docs/diagrams/class_diagram.jpeg" width="300" alt="Class Diagram" /> | <img src="docs/diagrams/use_case_diagram.png" width="300" alt="Use Cases" /> |
 
 </div>
 
